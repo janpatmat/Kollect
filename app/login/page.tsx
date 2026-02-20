@@ -23,13 +23,10 @@ export default function Login() {
         email,
         password,
       });
-      console.log(res);
       const { token, user } = res.data;
 
-      // Save raw token for backward compat with authHeader() calls
       localStorage.setItem("token", token);
 
-      // Save user into SessionContext (also persists to localStorage)
       setUser({
         id:        user.id,
         full_name: user.full_name,
@@ -37,7 +34,6 @@ export default function Login() {
         token,
       });
 
-      // Redirect to branch selection — branch_id will be stored there
       router.push("/branchchoice");
     } catch (err: any) {
       setError(err.response?.data?.error || "Invalid email or password");
@@ -47,67 +43,95 @@ export default function Login() {
   };
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800 flex items-center justify-center px-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
-        {/* Header */}
-        <div className="mb-6 text-center">
-          <h1 className="text-3xl font-bold text-slate-800">Welcome back</h1>
-          <p className="text-slate-500 mt-1">Sign in to your POS dashboard</p>
+    <main
+      className="min-h-screen bg-slate-950 flex items-center justify-center px-6"
+      style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}
+    >
+      <div className="w-full max-w-sm">
+
+        {/* Logo */}
+        <div className="flex flex-col items-center mb-10">
+          <div className="w-10 h-10 rounded-xl bg-indigo-500 flex items-center justify-center mb-4">
+            
+            
+          </div>
+          <h1 className="text-6xl font-semibold text-white leading-none">Kollect</h1>
+          <p className="text-lg text-slate-600 mt-1 uppercase tracking-widest">POS System</p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleLogin} className="space-y-5">
-          {/* Email */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Email address
-            </label>
-            <input
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
-              required
-            />
+        {/* Card */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-7">
+
+          {/* Heading */}
+          <div className="mb-6">
+            <h2 className="text-[15px] font-medium text-white">Sign in to your account</h2>
+            <p className="text-[12px] text-slate-500 mt-0.5">Enter your credentials below</p>
           </div>
 
-          {/* Password */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Password
-            </label>
-            <input
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
-              required
-            />
-          </div>
+          {/* Form */}
+          <form onSubmit={handleLogin} className="space-y-4">
 
-          {/* Error */}
-          {error && (
-            <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
-              {error}
+            {/* Email */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] text-slate-500 uppercase tracking-wider">Email address</label>
+              <input
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2.5 text-[13px] text-white placeholder-slate-700 focus:outline-none focus:border-indigo-500 transition-colors"
+              />
             </div>
-          )}
 
-          {/* Button */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-slate-900 text-white py-2.5 font-medium hover:bg-slate-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? "Signing in..." : "Sign in"}
-          </button>
-        </form>
+            {/* Password */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] text-slate-500 uppercase tracking-wider">Password</label>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2.5 text-[13px] text-white placeholder-slate-700 focus:outline-none focus:border-indigo-500 transition-colors"
+              />
+            </div>
+
+            {/* Error */}
+            {error && (
+              <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-red-500/10 border border-red-500/20">
+                <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24" className="text-red-400 flex-shrink-0">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <p className="text-[12px] text-red-400">{error}</p>
+              </div>
+            )}
+
+            {/* Submit */}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full mt-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[13px] font-medium py-2.5 rounded-lg transition-colors"
+            >
+              {loading ? (
+                <>
+                  <svg className="animate-spin" width="14" height="14" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/>
+                  </svg>
+                  Signing in...
+                </>
+              ) : (
+                "Sign in"
+              )}
+            </button>
+          </form>
+        </div>
 
         {/* Footer */}
-        <div className="mt-6 text-center text-sm text-slate-500">
-          © {new Date().getFullYear()} business name
-        </div>
+        <p className="text-[11px] text-slate-700 text-center mt-6">
+          © {new Date().getFullYear()} Kollect · Contact your administrator if you've lost access
+        </p>
       </div>
     </main>
   );
