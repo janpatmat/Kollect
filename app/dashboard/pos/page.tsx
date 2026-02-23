@@ -25,8 +25,10 @@ interface OrderItem {
   subtotal:       number;
   served:         boolean;
 }
-type DiscountType = "Senior" | "PWD" | "Custom";
+type DiscountType   = "Senior" | "PWD" | "Custom";
 interface DiscountRow { id: number; type: DiscountType; count: string; customRate: string; }
+type OrderCategory  = "official" | "others";
+type OrModalState   = false | "yesno" | "slip" | "credit";
 
 // ── Multi-row discount calculation ────────────────────────────────────────────
 function calcMultiDiscount(totalBill: number, headcount: number, rows: DiscountRow[]) {
@@ -38,8 +40,8 @@ function calcMultiDiscount(totalBill: number, headcount: number, rows: DiscountR
 
   for (const row of rows) {
     const count = parseInt(row.count) || 0;
-    const rate  = row.type === "PWD" ? 0.2 : row.type === "Senior" ? 0.2 : (parseFloat(row.customRate) / 100 || 0);
-    const rowDiscount = perPerson * rate * count;
+    const rate  = row.type === "PWD" ? 0.8 : row.type === "Senior" ? 0.8 : (parseFloat(row.customRate) / 100 || 0);
+    const rowDiscount = (perPerson / 1.12) * rate * count;
     totalDiscount += rowDiscount;
     discountedPeopleTotal += count;
     rowResults.push({ id: row.id, rowDiscount });
@@ -52,59 +54,91 @@ const authHeader = (token: string | undefined) => ({ Authorization: `Bearer ${to
 
 // ── localStorage helper for table numbers ─────────────────────────────────────
 const TABLE_KEY = (id: string | number) => `table:${id}`;
-const saveTableNumber  = (orderId: string | number, num: string) => {
+const saveTableNumber = (orderId: string | number, num: string) => {
   if (num.trim()) localStorage.setItem(TABLE_KEY(orderId), num.trim());
   else            localStorage.removeItem(TABLE_KEY(orderId));
 };
 
+// ── Payment methods ───────────────────────────────────────────────────────────
+const PAYMENT_METHODS = [
+  {
+    label: "Cash",
+    d: "M17 9V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2m2 4h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2zm7-5a2 2 0 1 1-4 0 2 2 0 0 1 4 0z",
+  },
+  {
+    label: "E-Wallet",
+    d: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+  },
+  {
+    label: "Bank Transfer",
+    d: "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 22V12h6v10",
+  },
+  {
+    label: "Credit / Debit",
+    d: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3z",
+  },
+];
+
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function POS() {
-  const router = useRouter();
+  const router       = useRouter();
   const searchParams = useSearchParams();
-  const orderId  = searchParams.get("order_id");
-  const isExisting = !!orderId;
+  const orderId      = searchParams.get("order_id");
+  const isExisting   = !!orderId;
 
   const { user, branch } = useSession();
 
   // Menu state
-  const [menuItems, setMenuItems]       = useState<MenuItem[]>([]);
-  const [categories, setCategories]     = useState<Category[]>([]);
-  const [filteredMenu, setFilteredMenu] = useState<MenuItem[]>([]);
-  const [search, setSearch]             = useState("");
+  const [menuItems, setMenuItems]               = useState<MenuItem[]>([]);
+  const [categories, setCategories]             = useState<Category[]>([]);
+  const [filteredMenu, setFilteredMenu]         = useState<MenuItem[]>([]);
+  const [search, setSearch]                     = useState("");
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
 
   // Order state
-  const [orders, setOrders]           = useState<OrderItem[]>([]);
-  const [currentItem, setCurrentItem] = useState<MenuItem | null>(null);
-  const [quantity, setQuantity]       = useState(1);
-  const [orderType, setOrderType]     = useState<"Dine In" | "Take Out" | "Foodpanda" | "Grab">("Dine In");
-  const [step, setStep]               = useState<"select" | "quantity" | "checkout">("select");
+  const [orders, setOrders]             = useState<OrderItem[]>([]);
+  const [currentItem, setCurrentItem]   = useState<MenuItem | null>(null);
+  const [quantity, setQuantity]         = useState(1);
+  const [orderType, setOrderType]       = useState<"Dine In" | "Take Out">("Dine In");
+  const [step, setStep]                 = useState<"select" | "quantity" | "checkout">("select");
   const [loadingOrder, setLoadingOrder] = useState(isExisting);
-  const [saving, setSaving]           = useState(false);
+  const [saving, setSaving]             = useState(false);
+
+  // pax, osNum — orderCategory always defaults to "others"
+  const [orderCategory]               = useState<OrderCategory>("others");
+  const [pax, setPax]                 = useState("");
+  const [osNum, setOsNum]             = useState("");
 
   // Payment state
-  const [paymentMethod, setPaymentMethod] = useState("Cash");
+  const [paymentMethod, setPaymentMethod]   = useState("Cash");
   const [amountReceived, setAmountReceived] = useState("");
-  const [headcount, setHeadcount] = useState("");
-  const [osNum, setOsNum] = useState("");
+  const [headcount, setHeadcount]           = useState("");
 
-  // ── Table number — local only, never sent to API ──────────────────────────
+  // Table number — local only, never sent to API
   const [tableNumber, setTableNumber] = useState("");
 
   // Discount rows
   const [discountRows, setDiscountRows] = useState<DiscountRow[]>([]);
-  const [nextRowId, setNextRowId] = useState(1);
+  const [nextRowId, setNextRowId]       = useState(1);
 
-  const totalBill = orders.reduce((s, o) => s + o.subtotal, 0);
-  const hc = parseInt(headcount) || 0;
-  const discCalc = calcMultiDiscount(totalBill, hc, discountRows);
-  const discountedOverLimit = hc > 0 && discCalc.discountedPeopleTotal > hc;
-  const discountValid = !discountedOverLimit;
-  const change = parseFloat(amountReceived) - discCalc.amountDue;
-  const amountReceivedValid = paymentMethod !== "Cash" || parseFloat(amountReceived) >= discCalc.amountDue;
-  const canConfirm = amountReceivedValid && discountValid;
-  const allServed  = orders.length > 0 && orders.every((o) => o.served);
-  const itemCount  = orders.reduce((s, o) => s + o.quantity, 0);
+  // OR modal
+  const [showOrModal, setShowOrModal]   = useState<OrModalState>(false);
+  const [orSlipNumber, setOrSlipNumber] = useState("");
+
+  // Loaded from existing order
+  const [existingCategory, setExistingCategory] = useState<OrderCategory | null>(null);
+  const [existingPax, setExistingPax]           = useState<number | null>(null);
+
+  const totalBill             = orders.reduce((s, o) => s + o.subtotal, 0);
+  const hc                    = parseInt(headcount) || 0;
+  const discCalc              = calcMultiDiscount(totalBill, hc, discountRows);
+  const discountedOverLimit   = hc > 0 && discCalc.discountedPeopleTotal > hc;
+  const discountValid         = !discountedOverLimit;
+  const change                = parseFloat(amountReceived) - discCalc.amountDue;
+  const amountReceivedValid   = paymentMethod !== "Cash" || parseFloat(amountReceived) >= discCalc.amountDue;
+  const canConfirm            = amountReceivedValid && discountValid;
+  const allServed             = orders.length > 0 && orders.every((o) => o.served);
+  const itemCount             = orders.reduce((s, o) => s + o.quantity, 0);
 
   // ── Fetch menu ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -122,12 +156,12 @@ export default function POS() {
     })();
   }, [branch]);
 
-  // ── Fetch existing order + load saved table number from localStorage ──────
+  // ── Fetch existing order ──────────────────────────────────────────────────
   useEffect(() => {
     if (!orderId || !user) return;
     (async () => {
       try {
-        const res = await axios.get(`${API}/orders/${orderId}`, { headers: authHeader(user.token) });
+        const res  = await axios.get(`${API}/orders/${orderId}`, { headers: authHeader(user.token) });
         const data = res.data.data;
         setOrders(
           data.items.map((i: any) => ({
@@ -142,7 +176,9 @@ export default function POS() {
           }))
         );
         setPaymentMethod(data.order_payment_method || "Cash");
-        // Restore table number from localStorage if it was previously saved
+        setExistingCategory(data.category ?? null);
+        // Preserve pax from the database — do not lose it
+        setExistingPax(data.pax ?? null);
         const saved = localStorage.getItem(TABLE_KEY(orderId));
         if (saved) setTableNumber(saved);
       } catch (e) { console.error("Failed to fetch order:", e); }
@@ -171,9 +207,13 @@ export default function POS() {
           : o
       );
       return [...prev, {
-        localId: `new-${currentItem.menu_id}-${Date.now()}`,
-        menu_id: currentItem.menu_id, menu_name: currentItem.menu_name,
-        price: currentItem.price, quantity, subtotal: quantity * currentItem.price, served: false,
+        localId:   `new-${currentItem.menu_id}-${Date.now()}`,
+        menu_id:   currentItem.menu_id,
+        menu_name: currentItem.menu_name,
+        price:     currentItem.price,
+        quantity,
+        subtotal:  quantity * currentItem.price,
+        served:    false,
       }];
     });
     setCurrentItem(null); setStep("select");
@@ -187,7 +227,7 @@ export default function POS() {
       ).filter((o) => o.quantity > 0)
     );
 
-  const removeItem = (localId: string) => setOrders((p) => p.filter((o) => o.localId !== localId));
+  const removeItem   = (localId: string) => setOrders((p) => p.filter((o) => o.localId !== localId));
   const toggleServed = (localId: string) =>
     setOrders((prev) => prev.map((o) => o.localId === localId ? { ...o, served: !o.served } : o));
 
@@ -201,6 +241,14 @@ export default function POS() {
     setDiscountRows((p) => p.map((r) => r.id === id ? { ...r, ...patch } : r));
   const removeDiscountRow = (id: number) =>
     setDiscountRows((p) => p.filter((r) => r.id !== id));
+
+  // ── Build items payload ───────────────────────────────────────────────────
+  const buildItemsPayload = () =>
+    orders.map((o) => ({
+      menu_id:  o.menu_id,
+      quantity: o.quantity,
+      ...(o.order_item_id ? { order_item_id: o.order_item_id, served: o.served } : {}),
+    }));
 
   // ── API actions ───────────────────────────────────────────────────────────
 
@@ -216,11 +264,12 @@ export default function POS() {
           branch_id:      branch.branch_id,
           user_id:        user.id,
           os_num:         osNum ? parseInt(osNum) : null,
-          items: orders.map((o) => ({ menu_id: o.menu_id, quantity: o.quantity })),
+          category:       orderCategory,
+          pax:            pax ? parseInt(pax) : null,
+          items:          orders.map((o) => ({ menu_id: o.menu_id, quantity: o.quantity })),
         },
         { headers: authHeader(user.token) }
       );
-      // Save table number locally using the new order_id returned from the API
       const newOrderId = res.data.data?.order_id ?? res.data.order_id;
       if (newOrderId && orderType === "Dine In") {
         saveTableNumber(newOrderId, tableNumber);
@@ -236,60 +285,118 @@ export default function POS() {
     try {
       await axios.put(
         `${API}/orders/${orderId}`,
-        {
-          payment_method: paymentMethod,
-          items: orders.map((o) => ({
-            menu_id: o.menu_id, quantity: o.quantity,
-            ...(o.order_item_id ? { order_item_id: o.order_item_id, served: o.served } : {}),
-          })),
-        },
+        { payment_method: paymentMethod, items: buildItemsPayload() },
         { headers: authHeader(user.token) }
       );
-      // Persist any changes to the table number
       saveTableNumber(orderId, tableNumber);
       router.push("/dashboard");
     } catch (e) { console.error("Failed to update order:", e); }
     finally { setSaving(false); }
   };
 
-  const handleConfirmPayment = async () => {
-    if (!orderId || !canConfirm || !user) return;
+  /**
+   * Core payment execution.
+   * @param finalCategory - resolved category to write (null = do not change)
+   * @param slipOsNum     - OR slip number to write into osNum (null = do not change)
+   */
+  const _executePayment = async (finalCategory: OrderCategory | null, slipOsNum: number | null = null) => {
+    if (!orderId || !user) return;
     setSaving(true);
     try {
+      // First sync items and payment method
       await axios.put(
         `${API}/orders/${orderId}`,
+        { payment_method: paymentMethod, items: buildItemsPayload() },
+        { headers: authHeader(user.token) }
+      );
+
+      // Then mark paid — pass pax explicitly so it is never lost
+      await axios.patch(
+        `${API}/orders/${orderId}/pay`,
         {
           payment_method: paymentMethod,
-          items: orders.map((o) => ({
-            menu_id: o.menu_id, quantity: o.quantity,
-            ...(o.order_item_id ? { order_item_id: o.order_item_id, served: o.served } : {}),
-          })),
+          total_bill:     totalBill,
+          total_discount: discCalc.totalDiscount,
+          ...(finalCategory              ? { category: finalCategory }          : {}),
+          ...(slipOsNum !== null         ? { os_num: slipOsNum }                : {}),
+          ...(existingPax !== null       ? { pax: existingPax }                 : {}),
         },
         { headers: authHeader(user.token) }
       );
-      await axios.patch(
-        `${API}/orders/${orderId}/pay`,
-        { payment_method: paymentMethod, total_bill: totalBill, total_discount: discCalc.totalDiscount },
-        { headers: authHeader(user.token) }
-      );
-      // Clean up table number from localStorage once order is paid
+
       localStorage.removeItem(TABLE_KEY(orderId));
       router.push("/dashboard");
     } catch (e) { console.error("Failed to confirm payment:", e); }
     finally { setSaving(false); }
   };
 
+  /**
+   * - category = official                        → no modal, save normally
+   * - category = others + Cash/E-Wallet/Bank     → show OR yes/no modal
+   * - category = others + Credit/Debit           → show slip input modal directly
+   * - category = official + Credit/Debit         → no modal, save normally
+   */
+  const handleConfirmPayment = async () => {
+    if (!orderId || !canConfirm || !user) return;
+
+    const cat = existingCategory;
+
+    if (cat === "official") {
+      await _executePayment(null);
+      return;
+    }
+
+    if (cat === "others" && paymentMethod === "Credit / Debit") {
+      setOrSlipNumber("");
+      setShowOrModal("credit");
+      return;
+    }
+
+    if (cat === "others" && ["Cash", "E-Wallet", "Bank Transfer"].includes(paymentMethod)) {
+      setOrSlipNumber("");
+      setShowOrModal("yesno");
+      return;
+    }
+
+    await _executePayment(null);
+  };
+
+  const handleOrNo = async () => {
+    setShowOrModal(false);
+    await _executePayment(null, null);
+  };
+
+  const handleOrYes = () => {
+    setShowOrModal("slip");
+  };
+
+  /**
+   * Confirm OR slip — upgrades category to official and saves slip number
+   * into the existing osNum column in the same payment transaction.
+   */
+  const handleOrSlipConfirm = async () => {
+    const parsedSlip = parseInt(orSlipNumber.trim());
+    if (!parsedSlip || parsedSlip < 1) return;
+    setShowOrModal(false);
+    await _executePayment("official", parsedSlip);
+  };
+
   const handleCancel = async () => {
     if (!orderId || !user || !confirm("Cancel this order?")) return;
     try {
       await axios.patch(`${API}/orders/${orderId}/cancel`, {}, { headers: authHeader(user.token) });
-      // Clean up table number from localStorage on cancel too
       localStorage.removeItem(TABLE_KEY(orderId));
       router.push("/dashboard");
     } catch (e) { console.error("Failed to cancel order:", e); }
   };
 
-  const now = new Date();
+  const canPlaceOrder =
+    orders.length > 0 &&
+    !saving &&
+    !!osNum &&
+    (orderType !== "Dine In" || !!tableNumber);
+
+  const now     = new Date();
   const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   const dateStr = now.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
 
@@ -394,8 +501,8 @@ export default function POS() {
               {!isExisting && (
                 <>
                   {/* Order type toggle */}
-                  <div className="flex gap-1.5 mb-3 flex-wrap">
-                    {(["Dine In", "Take Out", "Foodpanda", "Grab"] as const).map((t) => (
+                  <div className="flex gap-1.5 mb-3">
+                    {(["Dine In", "Take Out"] as const).map((t) => (
                       <button key={t} onClick={() => { setOrderType(t); if (t !== "Dine In") setTableNumber(""); }}
                         className={`flex-1 py-1.5 rounded-lg text-[11px] border transition-all ${orderType === t ? "bg-indigo-600 border-indigo-600 text-white" : "bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300"}`}>
                         {t}
@@ -403,9 +510,21 @@ export default function POS() {
                     ))}
                   </div>
 
-                  {/* Table number — only shown for Dine In, required */}
+                  {/* Number of Pax */}
+                  <div className="mb-3">
+                    <label className="text-[10px] text-slate-400 uppercase tracking-widest block mb-1.5">
+                      No. of Pax <span className="normal-case text-slate-300">(optional)</span>
+                    </label>
+                    <input
+                      type="number" min="1" placeholder="e.g. 4" value={pax}
+                      onChange={(e) => setPax(e.target.value)}
+                      className="w-full px-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-300 text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition"
+                    />
+                  </div>
+
+                  {/* Table number — only for Dine In */}
                   {orderType === "Dine In" && (
-                    <div>
+                    <div className="mb-3">
                       <label className="text-[10px] text-slate-400 uppercase tracking-widest block mb-1.5">
                         Table No. <span className="normal-case text-red-400">*</span>
                       </label>
@@ -424,7 +543,7 @@ export default function POS() {
                 </>
               )}
 
-              {/* Table number field for existing Dine In orders */}
+              {/* Table number field for existing orders */}
               {isExisting && (
                 <div className="mt-2">
                   <label className="text-[10px] text-slate-400 uppercase tracking-widest block mb-1.5">
@@ -511,7 +630,7 @@ export default function POS() {
                 <>
                   <div>
                     <label className="text-[10px] text-slate-400 uppercase tracking-widest block mb-1.5">
-                      Order Slip No. <span className="normal-case text-slate-300">(optional)</span>
+                      Order Slip No. <span className="normal-case text-red-400">*</span>
                     </label>
                     <div className="relative">
                       <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -524,9 +643,12 @@ export default function POS() {
                       />
                     </div>
                   </div>
-                  <button onClick={handlePlaceOrder} disabled={orders.length === 0 || saving || !osNum || (orderType === "Dine In" && !tableNumber)}
+                  <button onClick={handlePlaceOrder} disabled={!canPlaceOrder}
                     className="w-full bg-indigo-600 text-white text-[13px] py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed transition tracking-wide flex items-center justify-center gap-2">
-                    {saving ? (<><svg className="animate-spin" width="13" height="13" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>Placing...</>) : "Place Order"}
+                    {saving
+                      ? (<><svg className="animate-spin" width="13" height="13" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>Placing...</>)
+                      : "Place Order"
+                    }
                   </button>
                 </>
               )}
@@ -540,7 +662,10 @@ export default function POS() {
               <button onClick={() => setStep("select")} className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-slate-50 transition-colors">
                 <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
               </button>
-              <div><h2 className="text-[13px] text-slate-700">Payment</h2><p className="text-[11px] text-slate-400">Apply discounts & confirm</p></div>
+              <div>
+                <h2 className="text-[13px] text-slate-700">Payment</h2>
+                <p className="text-[11px] text-slate-400">Apply discounts & confirm</p>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5" style={{ scrollbarWidth: "thin" }}>
@@ -549,7 +674,10 @@ export default function POS() {
               <div className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden">
                 {orders.map((order) => (
                   <div key={order.localId} className="px-4 py-2.5 flex justify-between items-center border-b border-slate-100 last:border-0">
-                    <div><p className="text-[12px] text-slate-700">{order.menu_name}</p><p className="text-[11px] text-slate-400">×{order.quantity}</p></div>
+                    <div>
+                      <p className="text-[12px] text-slate-700">{order.menu_name}</p>
+                      <p className="text-[11px] text-slate-400">×{order.quantity}</p>
+                    </div>
                     <p className="text-[12px] text-slate-600">PHP {order.subtotal.toFixed(2)}</p>
                   </div>
                 ))}
@@ -559,6 +687,14 @@ export default function POS() {
                 </div>
               </div>
 
+              {/* Pax display — shows the pax loaded from the order, never resets */}
+              {existingPax !== null && (
+                <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 flex justify-between items-center">
+                  <span className="text-[11px] text-slate-500">No. of Pax</span>
+                  <span className="text-[13px] text-slate-700 font-medium">{existingPax}</span>
+                </div>
+              )}
+
               {/* Multi-row discount module */}
               <div>
                 <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-3">Discounts</p>
@@ -567,16 +703,20 @@ export default function POS() {
                   <input type="number" min="1" placeholder="e.g. 4" value={headcount}
                     onChange={(e) => { setHeadcount(e.target.value); setDiscountRows([]); }}
                     className="w-full px-3 py-2 text-[13px] bg-white border border-slate-200 rounded-lg placeholder-slate-300 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition"/>
-                  {hc > 0 && <p className="text-[11px] text-slate-400 mt-1">Share per person: <span className="text-slate-600">PHP {discCalc.perPerson.toFixed(2)}</span></p>}
+                  {hc > 0 && (
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Share per person: <span className="text-slate-600">PHP {discCalc.perPerson.toFixed(2)}</span>
+                    </p>
+                  )}
                 </div>
 
                 {discountRows.length > 0 && (
                   <div className="space-y-2 mb-3">
                     {discountRows.map((row, idx) => {
-                      const rowResult = discCalc.rows.find((r) => r.id === row.id);
-                      const rowDiscount = rowResult?.rowDiscount ?? 0;
+                      const rowResult     = discCalc.rows.find((r) => r.id === row.id);
+                      const rowDiscount   = rowResult?.rowDiscount ?? 0;
                       const effectiveRate = row.type === "PWD" ? 0.2 : row.type === "Senior" ? 0.2 : (parseFloat(row.customRate) / 100 || 0);
-                      const count = parseInt(row.count) || 0;
+                      const count         = parseInt(row.count) || 0;
                       return (
                         <div key={row.id} className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2.5">
                           <div className="flex items-center justify-between">
@@ -612,7 +752,9 @@ export default function POS() {
                           )}
                           <div className="flex items-center justify-between pt-1.5 border-t border-slate-200">
                             <span className="text-[11px] text-slate-400">
-                              {count > 0 && effectiveRate > 0 ? `${count} × PHP ${discCalc.perPerson.toFixed(2)} × ${(effectiveRate * 100).toFixed(0)}%` : "Enter count & rate"}
+                              {count > 0 && effectiveRate > 0
+                                ? `${count} × PHP ${discCalc.perPerson.toFixed(2)} × ${(effectiveRate * 100).toFixed(0)}%`
+                                : "Enter count & rate"}
                             </span>
                             <span className={`text-[11px] font-medium ${rowDiscount > 0 ? "text-red-500" : "text-slate-300"}`}>
                               {rowDiscount > 0 ? `− PHP ${rowDiscount.toFixed(2)}` : "—"}
@@ -650,11 +792,7 @@ export default function POS() {
               <div>
                 <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-2">Payment Method</p>
                 <div className="space-y-1.5">
-                  {[
-                    { label: "Cash",           d: "M17 9V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2m2 4h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2zm7-5a2 2 0 1 1-4 0 2 2 0 0 1 4 0z" },
-                    { label: "Credit / Debit", d: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3z" },
-                    { label: "E-Wallet",       d: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" },
-                  ].map((m) => (
+                  {PAYMENT_METHODS.map((m) => (
                     <button key={m.label} onClick={() => setPaymentMethod(m.label)}
                       className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl border text-[12px] transition-all ${paymentMethod === m.label ? "border-indigo-300 bg-indigo-50 text-indigo-700" : "border-slate-200 text-slate-500 hover:border-slate-300 hover:bg-slate-50"}`}>
                       <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d={m.d}/></svg>
@@ -694,7 +832,10 @@ export default function POS() {
             <div className="border-t border-slate-100 px-5 py-4 space-y-2 flex-shrink-0">
               <button onClick={handleConfirmPayment} disabled={!canConfirm || saving}
                 className="w-full bg-indigo-600 text-white text-[13px] py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed transition tracking-wide flex items-center justify-center gap-2">
-                {saving ? (<><svg className="animate-spin" width="13" height="13" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>Processing...</>) : `Confirm Payment · PHP ${discCalc.amountDue.toFixed(2)}`}
+                {saving
+                  ? (<><svg className="animate-spin" width="13" height="13" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>Processing...</>)
+                  : `Confirm Payment · PHP ${discCalc.amountDue.toFixed(2)}`
+                }
               </button>
               <button onClick={() => setStep("select")} className="w-full text-[11px] text-slate-400 hover:text-slate-600 py-1.5 transition">← Back to order</button>
             </div>
@@ -721,6 +862,61 @@ export default function POS() {
           </div>
         </div>
       )}
+
+      {/* ── OR MODAL: Yes / No ── */}
+      {showOrModal === "yesno" && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl shadow-slate-900/15 w-[320px] p-6">
+            <h3 className="text-[14px] text-slate-800 mb-2">Official Receipt</h3>
+            <p className="text-[12px] text-slate-500 mb-5">Does the customer want an Official Receipt (OR)?</p>
+            <div className="flex gap-2">
+              <button onClick={handleOrNo}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50 transition">
+                No
+              </button>
+              <button onClick={handleOrYes}
+                className="flex-[2] py-2.5 rounded-xl bg-indigo-600 text-white text-[13px] hover:bg-indigo-700 transition">
+                Yes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── OR MODAL: Slip number (from YES or Credit/Debit) ── */}
+      {(showOrModal === "slip" || showOrModal === "credit") && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl shadow-slate-900/15 w-[320px] p-6">
+            <h3 className="text-[14px] text-slate-800 mb-2">Order Slip Number</h3>
+            <p className="text-[12px] text-slate-500 mb-4">Enter the order slip number for the Official Receipt.</p>
+            <input
+              type="number"
+              min="1"
+              placeholder="e.g. 123"
+              value={orSlipNumber}
+              onChange={(e) => setOrSlipNumber(e.target.value)}
+              className="w-full px-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-300 text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition mb-4"
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowOrModal(false); setOrSlipNumber(""); }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50 transition">
+                Cancel
+              </button>
+              <button
+                onClick={handleOrSlipConfirm}
+                disabled={!orSlipNumber.trim() || parseInt(orSlipNumber.trim()) < 1 || saving}
+                className="flex-[2] py-2.5 rounded-xl bg-indigo-600 text-white text-[13px] hover:bg-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center justify-center gap-2">
+                {saving
+                  ? (<><svg className="animate-spin" width="13" height="13" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>Processing...</>)
+                  : "Confirm Payment"
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

@@ -9,6 +9,7 @@ interface MenuItem {
   menu_id:       number;
   menu_name:     string;
   category_name: string;
+  category_id:   number;
   price:         number;
 }
 
@@ -29,13 +30,14 @@ export default function MenuPage() {
   const { user, branch, hydrated } = useSession();
   const router = useRouter();
 
-  const [menuItems,  setMenuItems]  = useState<MenuItem[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [showForm,   setShowForm]   = useState(false);
-  const [loading,    setLoading]    = useState(false);
-  const [error,      setError]      = useState<string | null>(null);
-  const [search,     setSearch]     = useState("");
-  const [form,       setForm]       = useState<MenuForm>({
+  const [menuItems,    setMenuItems]    = useState<MenuItem[]>([]);
+  const [categories,   setCategories]   = useState<Category[]>([]);
+  const [showForm,     setShowForm]     = useState(false);
+  const [editItem,     setEditItem]     = useState<MenuItem | null>(null);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState<string | null>(null);
+  const [search,       setSearch]       = useState("");
+  const [form,         setForm]         = useState<MenuForm>({
     menu_name: "", category_id: "", price: "",
   });
 
@@ -71,33 +73,58 @@ export default function MenuPage() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  const openAddForm = () => {
+    setEditItem(null);
+    setForm({ menu_name: "", category_id: "", price: "" });
+    setError(null);
+    setShowForm(true);
+  };
+
+  const openEditForm = (item: MenuItem) => {
+    setEditItem(item);
+    setForm({
+      menu_name:   item.menu_name,
+      category_id: String(item.category_id),
+      price:       String(item.price),
+    });
+    setError(null);
+    setShowForm(true);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      if (!user) throw new Error("Not authenticated");
+      if (!user)   throw new Error("Not authenticated");
       if (!branch) throw new Error("No branch selected");
-      await axios.post(
-        `${API}/menu`,
-        {
-          menu_name:   form.menu_name,
-          category_id: Number(form.category_id),
-          price:       Number(form.price),
-          branch_id:   branch.branch_id,   // ✅ required by backend
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${user.token}`,  // ✅ fixed template literal
-            "Content-Type": "application/json",
-          },
-        }
-      );
+
+      const payload = {
+        menu_name:   form.menu_name,
+        category_id: Number(form.category_id),
+        price:       Number(form.price),
+        branch_id:   branch.branch_id,
+      };
+
+      const headers = {
+        Authorization: `Bearer ${user.token}`,
+        "Content-Type": "application/json",
+      };
+
+      if (editItem) {
+        // UPDATE
+        await axios.put(`${API}/menu/${editItem.menu_id}`, payload, { headers });
+      } else {
+        // CREATE
+        await axios.post(`${API}/menu`, payload, { headers });
+      }
+
       setForm({ menu_name: "", category_id: "", price: "" });
       setShowForm(false);
+      setEditItem(null);
       await fetchMenu();
     } catch (err: any) {
-      setError(err.response?.data?.error || "Failed to add menu item (admin only)");
+      setError(err.response?.data?.error || `Failed to ${editItem ? "update" : "add"} menu item (admin only)`);
     } finally {
       setLoading(false);
     }
@@ -132,7 +159,7 @@ export default function MenuPage() {
           )}
           <span className="text-[11px] text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">{menuItems.length} items</span>
           {user?.role === "admin" && (
-            <button onClick={() => { setShowForm(true); setError(null); }}
+            <button onClick={openAddForm}
               className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[12px] px-3.5 py-1.5 rounded-lg transition-colors">
               <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
               Add Item
@@ -182,6 +209,9 @@ export default function MenuPage() {
                   <th className="text-left text-[11px] text-slate-400 font-normal uppercase tracking-widest px-5 py-3">Name</th>
                   <th className="text-left text-[11px] text-slate-400 font-normal uppercase tracking-widest px-5 py-3">Category</th>
                   <th className="text-right text-[11px] text-slate-400 font-normal uppercase tracking-widest px-5 py-3">Price</th>
+                  {user?.role === "admin" && (
+                    <th className="px-5 py-3" />
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -203,6 +233,20 @@ export default function MenuPage() {
                     <td className="px-5 py-3.5 text-right">
                       <span className="text-[13px] text-slate-700">PHP {item.price.toFixed(2)}</span>
                     </td>
+                    {user?.role === "admin" && (
+                      <td className="px-5 py-3.5 text-right">
+                        <button
+                          onClick={() => openEditForm(item)}
+                          className="text-slate-400 hover:text-indigo-500 transition-colors"
+                          title="Edit item"
+                        >
+                          <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                          </svg>
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -211,14 +255,14 @@ export default function MenuPage() {
         </div>
       </div>
 
-      {/* ── ADD ITEM MODAL ── */}
+      {/* ── ADD / EDIT ITEM MODAL ── */}
       {showForm && (
         <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowForm(false)}>
           <div className="bg-white rounded-2xl shadow-2xl shadow-slate-900/15 w-[360px] p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <div>
-                <h3 className="text-[14px] text-slate-800">Add Menu Item</h3>
-                <p className="text-[11px] text-slate-400 mt-0.5">Fill in the details below</p>
+                <h3 className="text-[14px] text-slate-800">{editItem ? "Edit Menu Item" : "Add Menu Item"}</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">{editItem ? "Update the details below" : "Fill in the details below"}</p>
               </div>
               <button onClick={() => setShowForm(false)} className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-slate-50 transition-colors">
                 <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -264,7 +308,10 @@ export default function MenuPage() {
                   className="flex-1 py-2.5 rounded-xl border border-slate-200 text-[12px] text-slate-500 hover:bg-slate-50 transition">Cancel</button>
                 <button type="submit" disabled={loading}
                   className="flex-[2] py-2.5 rounded-xl bg-indigo-600 text-white text-[13px] hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition flex items-center justify-center gap-2">
-                  {loading ? (<><svg className="animate-spin" width="13" height="13" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>Saving...</>) : "Save Item"}
+                  {loading
+                    ? (<><svg className="animate-spin" width="13" height="13" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>Saving...</>)
+                    : editItem ? "Save Changes" : "Save Item"
+                  }
                 </button>
               </div>
             </form>

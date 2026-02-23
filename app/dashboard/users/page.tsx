@@ -113,6 +113,15 @@ const API = "http://localhost:5000";
     }
   };
 
+  const roleBadge = (role: string) => {
+    const styles: Record<string, string> = {
+      admin:      "bg-indigo-500/15 text-indigo-400",
+      supervisor: "bg-amber-500/15 text-amber-400",
+      cashier:    "bg-slate-700 text-slate-400",
+    };
+    return styles[role] ?? "bg-slate-700 text-slate-400";
+  };
+
   return (
     <div
       className="flex-1 bg-slate-950 min-h-screen p-6"
@@ -204,6 +213,7 @@ const API = "http://localhost:5000";
                 className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-white text-xs focus:outline-none focus:border-indigo-500 transition-colors"
               >
                 <option value="cashier">Cashier</option>
+                <option value="supervisor">Supervisor</option>
                 <option value="admin">Admin</option>
               </select>
             </div>
@@ -249,13 +259,7 @@ const API = "http://localhost:5000";
                   <td className="px-5 py-3 text-white font-medium">{user.full_name}</td>
                   <td className="px-5 py-3 text-slate-400">{user.email}</td>
                   <td className="px-5 py-3">
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${
-                        user.role === "admin"
-                          ? "bg-indigo-500/15 text-indigo-400"
-                          : "bg-slate-700 text-slate-400"
-                      }`}
-                    >
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${roleBadge(user.role)}`}>
                       {user.role}
                     </span>
                   </td>

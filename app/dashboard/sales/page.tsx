@@ -14,21 +14,25 @@ interface SaleRecord {
   total_discount:       number;
   osNum:                number | null;
   cashier_name:         string | null;
+  category:             "official" | "others" | null;
+  pax:                  number | null;
 }
 
 const API = "http://localhost:5000";
 
-const PAYMENT_METHODS = ["All", "Cash", "Credit / Debit", "E-Wallet"];
-const ORDER_STATUSES  = ["All", "Dine In", "Take Out", "Foodpanda", "Grab"];
+const PAYMENT_METHODS   = ["All", "Cash", "Credit / Debit", "E-Wallet", "Bank Transfer"];
+const ORDER_STATUSES    = ["All", "Dine In", "Take Out"];
+const ORDER_CATEGORIES  = ["All", "official", "others"];
 
 export default function SalesPage() {
   const { branch, hydrated } = useSession();
   const router = useRouter();
 
-  const [sales,         setSales]         = useState<SaleRecord[]>([]);
-  const [loading,       setLoading]       = useState(true);
-  const [filterPayment, setFilterPayment] = useState("All");
-  const [filterStatus,  setFilterStatus]  = useState("All");
+  const [sales,           setSales]           = useState<SaleRecord[]>([]);
+  const [loading,         setLoading]         = useState(true);
+  const [filterPayment,   setFilterPayment]   = useState("All");
+  const [filterStatus,    setFilterStatus]    = useState("All");
+  const [filterCategory,  setFilterCategory]  = useState("All");
 
   useEffect(() => {
     if (!hydrated) return;
@@ -46,11 +50,12 @@ export default function SalesPage() {
   // ── All hooks must be called before any early return ─────────────────────
   const filtered = useMemo(() => {
     return sales.filter((s) => {
-      const matchPayment = filterPayment === "All" || s.order_payment_method === filterPayment;
-      const matchStatus  = filterStatus  === "All" || s.status === filterStatus;
-      return matchPayment && matchStatus;
+      const matchPayment  = filterPayment  === "All" || s.order_payment_method === filterPayment;
+      const matchStatus   = filterStatus   === "All" || s.status               === filterStatus;
+      const matchCategory = filterCategory === "All" || s.category             === filterCategory;
+      return matchPayment && matchStatus && matchCategory;
     });
-  }, [sales, filterPayment, filterStatus]);
+  }, [sales, filterPayment, filterStatus, filterCategory]);
 
   const totalRevenue  = filtered.reduce((s, r) => s + Number(r.total_bill), 0);
   const totalDiscount = filtered.reduce((s, r) => s + Number(r.total_discount), 0);
@@ -70,14 +75,18 @@ export default function SalesPage() {
     "Dine In":   "text-indigo-600 bg-indigo-50 border-indigo-100",
     "Take Out":  "text-emerald-600 bg-emerald-50 border-emerald-100",
     "Cancelled": "text-red-500 bg-red-50 border-red-100",
-    "Foodpanda": "text-pink-600 bg-pink-50 border-pink-100",
-    "Grab":      "text-green-600 bg-green-50 border-green-100",
+  };
+
+  const categoryColors: Record<string, string> = {
+    "official": "text-violet-600 bg-violet-50 border-violet-100",
+    "others":   "text-slate-500 bg-slate-50 border-slate-200",
   };
 
   const paymentIcon: Record<string, string> = {
     "Cash":           "M17 9V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2m2 4h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2zm7-5a2 2 0 1 1-4 0 2 2 0 0 1 4 0z",
     "Credit / Debit": "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3H6a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3z",
     "E-Wallet":       "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+    "Bank Transfer":  "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 22V12h6v10",
   };
 
   return (
@@ -123,7 +132,7 @@ export default function SalesPage() {
         <div className="flex gap-4 flex-wrap">
           <div>
             <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-1.5">Payment Method</p>
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 flex-wrap">
               {PAYMENT_METHODS.map((m) => (
                 <button key={m} onClick={() => setFilterPayment(m)}
                   className={`text-[12px] px-3 py-1.5 rounded-lg border transition-all ${filterPayment === m ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"}`}>
@@ -139,6 +148,17 @@ export default function SalesPage() {
                 <button key={s} onClick={() => setFilterStatus(s)}
                   className={`text-[12px] px-3 py-1.5 rounded-lg border transition-all ${filterStatus === s ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"}`}>
                   {s}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-1.5">Category</p>
+            <div className="flex gap-1.5">
+              {ORDER_CATEGORIES.map((c) => (
+                <button key={c} onClick={() => setFilterCategory(c)}
+                  className={`text-[12px] px-3 py-1.5 rounded-lg border capitalize transition-all ${filterCategory === c ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+                  {c}
                 </button>
               ))}
             </div>
@@ -165,7 +185,7 @@ export default function SalesPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-100">
-                  {["Order", "Time", "Cashier", "Status", "Payment", "Bill", "Discount", "Net"].map((h) => (
+                  {["Order", "Time", "Cashier", "Status", "Category", "Payment", "Bill", "Discount", "Net"].map((h) => (
                     <th key={h} className="text-left text-[10px] text-slate-400 font-normal uppercase tracking-widest px-5 py-3">{h}</th>
                   ))}
                 </tr>
@@ -173,7 +193,7 @@ export default function SalesPage() {
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((sale) => {
                   const timeStr = new Date(sale.order_datetime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-                  const net = Number(sale.total_bill) - Number(sale.total_discount);
+                  const net     = Number(sale.total_bill) - Number(sale.total_discount);
                   return (
                     <tr key={sale.order_id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-5 py-3.5">
@@ -186,6 +206,15 @@ export default function SalesPage() {
                         <span className={`text-[11px] border px-2.5 py-1 rounded-full ${statusColors[sale.status] ?? "text-slate-500 bg-slate-50 border-slate-100"}`}>
                           {sale.status}
                         </span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {sale.category ? (
+                          <span className={`text-[11px] border px-2.5 py-1 rounded-full capitalize ${categoryColors[sale.category] ?? "text-slate-500 bg-slate-50 border-slate-100"}`}>
+                            {sale.category}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-slate-300">—</span>
+                        )}
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-1.5 text-[12px] text-slate-600">
