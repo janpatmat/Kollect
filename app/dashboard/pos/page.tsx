@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { useSession } from "@/context/SessionContext";
@@ -79,8 +79,8 @@ const PAYMENT_METHODS = [
   },
 ];
 
-// ── Component ─────────────────────────────────────────────────────────────────
-export default function POS() {
+// ── Inner component (uses useSearchParams — must be inside Suspense) ──────────
+function POSContent() {
   const router       = useRouter();
   const searchParams = useSearchParams();
   const orderId      = searchParams.get("order_id");
@@ -177,7 +177,6 @@ export default function POS() {
         );
         setPaymentMethod(data.order_payment_method || "Cash");
         setExistingCategory(data.category ?? null);
-        // Preserve pax from the database — do not lose it
         setExistingPax(data.pax ?? null);
         const saved = localStorage.getItem(TABLE_KEY(orderId));
         if (saved) setTableNumber(saved);
@@ -251,7 +250,6 @@ export default function POS() {
     }));
 
   // ── API actions ───────────────────────────────────────────────────────────
-
   const handlePlaceOrder = async () => {
     if (!user || !branch) return;
     setSaving(true);
@@ -294,86 +292,44 @@ export default function POS() {
     finally { setSaving(false); }
   };
 
-  /**
-   * Core payment execution.
-   * @param finalCategory - resolved category to write (null = do not change)
-   * @param slipOsNum     - OR slip number to write into osNum (null = do not change)
-   */
   const _executePayment = async (finalCategory: OrderCategory | null, slipOsNum: number | null = null) => {
     if (!orderId || !user) return;
     setSaving(true);
     try {
-      // First sync items and payment method
       await axios.put(
         `${API}/orders/${orderId}`,
         { payment_method: paymentMethod, items: buildItemsPayload() },
         { headers: authHeader(user.token) }
       );
-
-      // Then mark paid — pass pax explicitly so it is never lost
       await axios.patch(
         `${API}/orders/${orderId}/pay`,
         {
           payment_method: paymentMethod,
           total_bill:     totalBill,
           total_discount: discCalc.totalDiscount,
-          ...(finalCategory              ? { category: finalCategory }          : {}),
-          ...(slipOsNum !== null         ? { os_num: slipOsNum }                : {}),
-          ...(existingPax !== null       ? { pax: existingPax }                 : {}),
+          ...(finalCategory        ? { category: finalCategory } : {}),
+          ...(slipOsNum !== null   ? { os_num: slipOsNum }       : {}),
+          ...(existingPax !== null ? { pax: existingPax }        : {}),
         },
         { headers: authHeader(user.token) }
       );
-
       localStorage.removeItem(TABLE_KEY(orderId));
       router.push("/dashboard");
     } catch (e) { console.error("Failed to confirm payment:", e); }
     finally { setSaving(false); }
   };
 
-  /**
-   * - category = official                        → no modal, save normally
-   * - category = others + Cash/E-Wallet/Bank     → show OR yes/no modal
-   * - category = others + Credit/Debit           → show slip input modal directly
-   * - category = official + Credit/Debit         → no modal, save normally
-   */
   const handleConfirmPayment = async () => {
     if (!orderId || !canConfirm || !user) return;
-
     const cat = existingCategory;
-
-    if (cat === "official") {
-      await _executePayment(null);
-      return;
-    }
-
-    if (cat === "others" && paymentMethod === "Credit / Debit") {
-      setOrSlipNumber("");
-      setShowOrModal("credit");
-      return;
-    }
-
-    if (cat === "others" && ["Cash", "E-Wallet", "Bank Transfer"].includes(paymentMethod)) {
-      setOrSlipNumber("");
-      setShowOrModal("yesno");
-      return;
-    }
-
+    if (cat === "official") { await _executePayment(null); return; }
+    if (cat === "others" && paymentMethod === "Credit / Debit") { setOrSlipNumber(""); setShowOrModal("credit"); return; }
+    if (cat === "others" && ["Cash", "E-Wallet", "Bank Transfer"].includes(paymentMethod)) { setOrSlipNumber(""); setShowOrModal("yesno"); return; }
     await _executePayment(null);
   };
 
-  const handleOrNo = async () => {
-    setShowOrModal(false);
-    await _executePayment(null, null);
-  };
-
-  const handleOrYes = () => {
-    setShowOrModal("slip");
-  };
-
-  /**
-   * Confirm OR slip — upgrades category to official and saves slip number
-   * into the existing osNum column in the same payment transaction.
-   */
+  const handleOrNo          = async () => { setShowOrModal(false); await _executePayment(null, null); };
+  const handleOrYes         = () => { setShowOrModal("slip"); };
   const handleOrSlipConfirm = async () => {
     const parsedSlip = parseInt(orSlipNumber.trim());
     if (!parsedSlip || parsedSlip < 1) return;
@@ -500,7 +456,6 @@ export default function POS() {
 
               {!isExisting && (
                 <>
-                  {/* Order type toggle */}
                   <div className="flex gap-1.5 mb-3">
                     {(["Dine In", "Take Out"] as const).map((t) => (
                       <button key={t} onClick={() => { setOrderType(t); if (t !== "Dine In") setTableNumber(""); }}
@@ -509,55 +464,37 @@ export default function POS() {
                       </button>
                     ))}
                   </div>
-
-                  {/* Number of Pax */}
                   <div className="mb-3">
                     <label className="text-[10px] text-slate-400 uppercase tracking-widest block mb-1.5">
                       No. of Pax <span className="normal-case text-slate-300">(optional)</span>
                     </label>
-                    <input
-                      type="number" min="1" placeholder="e.g. 4" value={pax}
-                      onChange={(e) => setPax(e.target.value)}
-                      className="w-full px-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-300 text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition"
-                    />
+                    <input type="number" min="1" placeholder="e.g. 4" value={pax} onChange={(e) => setPax(e.target.value)}
+                      className="w-full px-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-300 text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition"/>
                   </div>
-
-                  {/* Table number — only for Dine In */}
                   {orderType === "Dine In" && (
                     <div className="mb-3">
                       <label className="text-[10px] text-slate-400 uppercase tracking-widest block mb-1.5">
                         Table No. <span className="normal-case text-red-400">*</span>
                       </label>
                       <div className="relative">
-                        <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                          <path d="M3 10h18M3 14h18M10 4v16M14 4v16"/>
-                        </svg>
-                        <input
-                          type="number" min="1" placeholder="e.g. 5" value={tableNumber}
-                          onChange={(e) => setTableNumber(e.target.value)}
-                          className="w-full pl-8 pr-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-300 text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition"
-                        />
+                        <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 10h18M3 14h18M10 4v16M14 4v16"/></svg>
+                        <input type="number" min="1" placeholder="e.g. 5" value={tableNumber} onChange={(e) => setTableNumber(e.target.value)}
+                          className="w-full pl-8 pr-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-300 text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition"/>
                       </div>
                     </div>
                   )}
                 </>
               )}
 
-              {/* Table number field for existing orders */}
               {isExisting && (
                 <div className="mt-2">
                   <label className="text-[10px] text-slate-400 uppercase tracking-widest block mb-1.5">
                     Table No. <span className="normal-case text-red-400">*</span>
                   </label>
                   <div className="relative">
-                    <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path d="M3 10h18M3 14h18M10 4v16M14 4v16"/>
-                    </svg>
-                    <input
-                      type="number" min="1" placeholder="e.g. 5" value={tableNumber}
-                      onChange={(e) => setTableNumber(e.target.value)}
-                      className="w-full pl-8 pr-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-300 text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition"
-                    />
+                    <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M3 10h18M3 14h18M10 4v16M14 4v16"/></svg>
+                    <input type="number" min="1" placeholder="e.g. 5" value={tableNumber} onChange={(e) => setTableNumber(e.target.value)}
+                      className="w-full pl-8 pr-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-300 text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition"/>
                   </div>
                 </div>
               )}
@@ -575,17 +512,10 @@ export default function POS() {
                     <div key={order.localId} className="px-5 py-3 space-y-2">
                       <div className="flex items-center gap-2">
                         {isExisting && (
-                          <input
-                            type="checkbox"
-                            checked={order.served}
-                            onChange={() => toggleServed(order.localId)}
-                            className="accent-emerald-500 w-3.5 h-3.5 flex-shrink-0"
-                          />
+                          <input type="checkbox" checked={order.served} onChange={() => toggleServed(order.localId)} className="accent-emerald-500 w-3.5 h-3.5 flex-shrink-0"/>
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className={`text-[12px] truncate ${order.served ? "text-emerald-600" : "text-slate-700"}`}>
-                            {order.menu_name}
-                          </p>
+                          <p className={`text-[12px] truncate ${order.served ? "text-emerald-600" : "text-slate-700"}`}>{order.menu_name}</p>
                           <p className="text-[11px] text-slate-400 mt-0.5">PHP {order.price.toFixed(2)}</p>
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
@@ -633,14 +563,9 @@ export default function POS() {
                       Order Slip No. <span className="normal-case text-red-400">*</span>
                     </label>
                     <div className="relative">
-                      <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"/>
-                      </svg>
-                      <input
-                        type="number" min="1" placeholder="e.g. 42" value={osNum}
-                        onChange={(e) => setOsNum(e.target.value)}
-                        className="w-full pl-8 pr-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-300 text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition"
-                      />
+                      <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"/></svg>
+                      <input type="number" min="1" placeholder="e.g. 42" value={osNum} onChange={(e) => setOsNum(e.target.value)}
+                        className="w-full pl-8 pr-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-300 text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition"/>
                     </div>
                   </div>
                   <button onClick={handlePlaceOrder} disabled={!canPlaceOrder}
@@ -669,7 +594,6 @@ export default function POS() {
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5" style={{ scrollbarWidth: "thin" }}>
-
               {/* Order summary */}
               <div className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden">
                 {orders.map((order) => (
@@ -687,7 +611,6 @@ export default function POS() {
                 </div>
               </div>
 
-              {/* Pax display — shows the pax loaded from the order, never resets */}
               {existingPax !== null && (
                 <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 flex justify-between items-center">
                   <span className="text-[11px] text-slate-500">No. of Pax</span>
@@ -870,42 +793,25 @@ export default function POS() {
             <h3 className="text-[14px] text-slate-800 mb-2">Official Receipt</h3>
             <p className="text-[12px] text-slate-500 mb-5">Does the customer want an Official Receipt (OR)?</p>
             <div className="flex gap-2">
-              <button onClick={handleOrNo}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50 transition">
-                No
-              </button>
-              <button onClick={handleOrYes}
-                className="flex-[2] py-2.5 rounded-xl bg-indigo-600 text-white text-[13px] hover:bg-indigo-700 transition">
-                Yes
-              </button>
+              <button onClick={handleOrNo} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50 transition">No</button>
+              <button onClick={handleOrYes} className="flex-[2] py-2.5 rounded-xl bg-indigo-600 text-white text-[13px] hover:bg-indigo-700 transition">Yes</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── OR MODAL: Slip number (from YES or Credit/Debit) ── */}
+      {/* ── OR MODAL: Slip number ── */}
       {(showOrModal === "slip" || showOrModal === "credit") && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-2xl shadow-slate-900/15 w-[320px] p-6">
             <h3 className="text-[14px] text-slate-800 mb-2">Order Slip Number</h3>
             <p className="text-[12px] text-slate-500 mb-4">Enter the order slip number for the Official Receipt.</p>
-            <input
-              type="number"
-              min="1"
-              placeholder="e.g. 123"
-              value={orSlipNumber}
-              onChange={(e) => setOrSlipNumber(e.target.value)}
-              className="w-full px-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-300 text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition mb-4"
-            />
+            <input type="number" min="1" placeholder="e.g. 123" value={orSlipNumber} onChange={(e) => setOrSlipNumber(e.target.value)}
+              className="w-full px-3 py-2 text-[13px] bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-300 text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition mb-4"/>
             <div className="flex gap-2">
-              <button
-                onClick={() => { setShowOrModal(false); setOrSlipNumber(""); }}
-                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50 transition">
-                Cancel
-              </button>
-              <button
-                onClick={handleOrSlipConfirm}
-                disabled={!orSlipNumber.trim() || parseInt(orSlipNumber.trim()) < 1 || saving}
+              <button onClick={() => { setShowOrModal(false); setOrSlipNumber(""); }}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50 transition">Cancel</button>
+              <button onClick={handleOrSlipConfirm} disabled={!orSlipNumber.trim() || parseInt(orSlipNumber.trim()) < 1 || saving}
                 className="flex-[2] py-2.5 rounded-xl bg-indigo-600 text-white text-[13px] hover:bg-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center justify-center gap-2">
                 {saving
                   ? (<><svg className="animate-spin" width="13" height="13" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>Processing...</>)
@@ -916,7 +822,20 @@ export default function POS() {
           </div>
         </div>
       )}
-
     </div>
+  );
+}
+
+// ── Page export — wraps POSContent in a Suspense boundary ─────────────────────
+export default function POSPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center h-screen bg-slate-50 gap-3 text-slate-400" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+        <svg className="animate-spin" width="18" height="18" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>
+        <span className="text-[13px]">Loading...</span>
+      </div>
+    }>
+      <POSContent />
+    </Suspense>
   );
 }
