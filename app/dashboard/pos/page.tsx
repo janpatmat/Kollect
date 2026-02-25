@@ -42,8 +42,11 @@ function calcMultiDiscount(totalBill: number, headcount: number, rows: DiscountR
     const count = parseInt(row.count) || 0;
     const rate  = row.type === "PWD" ? 0.80 : row.type === "Senior" ? 0.80 : ((100 - (parseFloat(row.customRate) || 0)) / 100);
 
-    // Discounted portion: remove VAT then apply discounted rate
-    const rowDiscountedAmount = (perPerson / 1.12) * rate * count;
+    // PWD/Senior: remove VAT first, then apply discounted rate
+    // Custom: apply rate directly to perPerson (no VAT removal)
+    const rowDiscountedAmount = row.type === "Custom"
+      ? perPerson * rate * count
+      : (perPerson / 1.12) * rate * count;
 
     // What these pax would have paid at full price
     const rowFullAmount = perPerson * count;
@@ -62,7 +65,10 @@ function calcMultiDiscount(totalBill: number, headcount: number, rows: DiscountR
     const row   = rows.find((ro) => ro.id === r.id)!;
     const count = parseInt(row.count) || 0;
     const rate  = row.type === "PWD" ? 0.80 : row.type === "Senior" ? 0.80 : ((100 - (parseFloat(row.customRate) || 0)) / 100);
-    return sum + (perPerson / 1.12) * rate * count;
+    // Same logic: Custom skips /1.12
+    return sum + (row.type === "Custom"
+      ? perPerson * rate * count
+      : (perPerson / 1.12) * rate * count);
   }, 0);
 
   const totalDiscountedBill = discountedPortionsSum + fullPricedAmount;
@@ -206,6 +212,7 @@ function POSContent() {
         setPaymentMethod(data.order_payment_method || "Cash");
         setExistingCategory(data.category ?? null);
         setExistingPax(data.pax ?? null);
+        if (data.pax) setHeadcount(String(data.pax));
         const saved = localStorage.getItem(TABLE_KEY(orderId));
         if (saved) setTableNumber(saved);
       } catch (e) { console.error("Failed to fetch order:", e); }
@@ -337,7 +344,7 @@ function POSContent() {
           total_discount: discCalc.totalDiscount,
           ...(finalCategory        ? { category: finalCategory } : {}),
           ...(slipOsNum !== null   ? { os_num: slipOsNum }       : {}),
-          ...(existingPax !== null ? { pax: existingPax }        : {}),
+          ...(hc > 0               ? { pax: hc }                 : existingPax !== null ? { pax: existingPax } : {}),
         },
         { headers: authHeader(user.token) }
       );
@@ -639,21 +646,23 @@ function POSContent() {
                 </div>
               </div>
 
-              {existingPax !== null && (
-                <div className="bg-slate-50 border border-slate-100 rounded-xl px-4 py-3 flex justify-between items-center">
-                  <span className="text-[11px] text-slate-500">No. of Pax</span>
-                  <span className="text-[13px] text-slate-700 font-medium">{existingPax}</span>
-                </div>
-              )}
 
               {/* Multi-row discount module */}
               <div>
                 <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-3">Discounts</p>
                 <div className="mb-3">
-                  <label className="text-[11px] text-slate-500 block mb-1.5">Total Number of People</label>
-                  <input type="number" min="1" placeholder="e.g. 4" value={headcount}
+                  <label className="text-[11px] text-slate-500 block mb-1.5">
+                    No. of Pax
+                    <span className="ml-1 text-slate-400 font-normal">(edits will update the record)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="e.g. 4"
+                    value={headcount}
                     onChange={(e) => { setHeadcount(e.target.value); setDiscountRows([]); }}
-                    className="w-full px-3 py-2 text-[13px] bg-white border border-slate-200 rounded-lg placeholder-slate-300 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition"/>
+                    className="w-full px-3 py-2 text-[13px] bg-white border border-slate-200 rounded-lg placeholder-slate-300 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition"
+                  />
                   {hc > 0 && (
                     <p className="text-[11px] text-slate-400 mt-1">
                       Share per person: <span className="text-slate-600">PHP {discCalc.perPerson.toFixed(2)}</span>

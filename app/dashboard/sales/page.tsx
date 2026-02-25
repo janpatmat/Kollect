@@ -34,14 +34,22 @@ export default function SalesPage() {
   const [filterStatus,    setFilterStatus]    = useState("All");
   const [filterCategory,  setFilterCategory]  = useState("All");
 
+  // total_pax comes from /stats/daily — independent of the sales filters
+  const [totalPaxDay, setTotalPaxDay] = useState<number>(0);
+
   useEffect(() => {
     if (!hydrated) return;
     if (!branch) { router.replace("/branchchoice"); return; }
 
     (async () => {
       try {
-        const res = await axios.get(`${API}/orders/sales/daily?branch_id=${branch.branch_id}`);
-        setSales(res.data.data);
+        const [salesRes, statsRes] = await Promise.all([
+          axios.get(`${API}/orders/sales/daily?branch_id=${branch.branch_id}`),
+          axios.get(`${API}/orders/stats/daily?branch_id=${branch.branch_id}`),
+        ]);
+        setSales(salesRes.data.data);
+       
+        setTotalPaxDay(Number(statsRes.data.data.total_pax) || 0);
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     })();
@@ -115,15 +123,17 @@ export default function SalesPage() {
       <div className="flex-1 overflow-y-auto p-6 space-y-5" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
 
         {/* Summary cards */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-4 gap-3">
           {[
-            { label: "Gross Sales",     value: `PHP ${totalRevenue.toFixed(2)}`,    color: "text-slate-800"  },
-            { label: "Total Discounts", value: `− PHP ${totalDiscount.toFixed(2)}`, color: "text-red-500"    },
-            { label: "Net Sales",       value: `PHP ${netRevenue.toFixed(2)}`,      color: "text-indigo-600" },
+            { label: "Gross Sales",     value: `PHP ${totalRevenue.toFixed(2)}`,    color: "text-slate-800",   sub: null },
+            { label: "Total Discounts", value: `− PHP ${totalDiscount.toFixed(2)}`, color: "text-red-500",     sub: null },
+            { label: "Net Sales",       value: `PHP ${netRevenue.toFixed(2)}`,      color: "text-indigo-600",  sub: null },
+            { label: "Total Pax Today", value: totalPaxDay.toString(),              color: "text-emerald-600", sub: "across all paid orders" },
           ].map((c) => (
             <div key={c.label} className="bg-white border border-slate-200 rounded-xl px-5 py-4">
               <p className="text-[11px] text-slate-400 mb-1">{c.label}</p>
               <p className={`text-[20px] font-medium ${c.color}`}>{c.value}</p>
+              {c.sub && <p className="text-[10px] text-slate-300 mt-1">{c.sub}</p>}
             </div>
           ))}
         </div>
@@ -185,7 +195,7 @@ export default function SalesPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-100">
-                  {["Order", "Time", "Cashier", "Status", "Category", "Payment", "Bill", "Discount", "Net"].map((h) => (
+                  {["Order", "Time", "Cashier", "Status", "Category", "Pax", "Payment", "Bill", "Discount", "Net"].map((h) => (
                     <th key={h} className="text-left text-[10px] text-slate-400 font-normal uppercase tracking-widest px-5 py-3">{h}</th>
                   ))}
                 </tr>
@@ -215,6 +225,9 @@ export default function SalesPage() {
                         ) : (
                           <span className="text-[11px] text-slate-300">—</span>
                         )}
+                      </td>
+                      <td className="px-5 py-3.5 text-[12px] text-slate-600">
+                        {sale.pax ?? <span className="text-slate-300">—</span>}
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-1.5 text-[12px] text-slate-600">
