@@ -33,20 +33,48 @@ type OrModalState   = false | "yesno" | "slip" | "credit";
 // ── Multi-row discount calculation ────────────────────────────────────────────
 function calcMultiDiscount(totalBill: number, headcount: number, rows: DiscountRow[]) {
   if (headcount <= 0) return { perPerson: 0, rows: [], totalDiscount: 0, amountDue: totalBill, discountedPeopleTotal: 0 };
+
   const perPerson = totalBill / headcount;
-  let totalDiscount = 0;
-  let discountedPeopleTotal = 0;
+  let totalDiscountedPax = 0;
   const rowResults: { id: number; rowDiscount: number }[] = [];
 
   for (const row of rows) {
     const count = parseInt(row.count) || 0;
-    const rate  = row.type === "PWD" ? 0.8 : row.type === "Senior" ? 0.8 : (parseFloat(row.customRate) / 100 || 0);
-    const rowDiscount = (perPerson / 1.12) * rate * count;
-    totalDiscount += rowDiscount;
-    discountedPeopleTotal += count;
+    const rate  = row.type === "PWD" ? 0.80 : row.type === "Senior" ? 0.80 : ((100 - (parseFloat(row.customRate) || 0)) / 100);
+
+    // Discounted portion: remove VAT then apply discounted rate
+    const rowDiscountedAmount = (perPerson / 1.12) * rate * count;
+
+    // What these pax would have paid at full price
+    const rowFullAmount = perPerson * count;
+
+    const rowDiscount = rowFullAmount - rowDiscountedAmount;
+    totalDiscountedPax += count;
     rowResults.push({ id: row.id, rowDiscount });
   }
-  return { perPerson, rows: rowResults, totalDiscount, amountDue: Math.max(0, totalBill - totalDiscount), discountedPeopleTotal };
+
+  // Full-priced pax portion
+  const remainingPax           = headcount - totalDiscountedPax;
+  const fullPricedAmount       = perPerson * remainingPax;
+
+  // Sum discounted portions for each row
+  const discountedPortionsSum  = rowResults.reduce((sum, r) => {
+    const row   = rows.find((ro) => ro.id === r.id)!;
+    const count = parseInt(row.count) || 0;
+    const rate  = row.type === "PWD" ? 0.80 : row.type === "Senior" ? 0.80 : ((100 - (parseFloat(row.customRate) || 0)) / 100);
+    return sum + (perPerson / 1.12) * rate * count;
+  }, 0);
+
+  const totalDiscountedBill = discountedPortionsSum + fullPricedAmount;
+  const totalDiscount       = totalBill - totalDiscountedBill;
+
+  return {
+    perPerson,
+    rows:                  rowResults,
+    totalDiscount:         Math.max(0, totalDiscount),
+    amountDue:             Math.max(0, totalDiscountedBill),
+    discountedPeopleTotal: totalDiscountedPax,
+  };
 }
 
 const API = "http://localhost:5000";
