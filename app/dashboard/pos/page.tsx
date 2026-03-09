@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useEffect } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { useSession } from "@/context/SessionContext";
@@ -113,6 +113,79 @@ const PAYMENT_METHODS = [
   },
 ];
 
+// ── Hardcoded password for updating orders ────────────────────────────────────
+const UPDATE_PASSWORD = "ksuchange321";
+
+// ── Password modal component ──────────────────────────────────────────────────
+function UpdatePasswordModal({ onSuccess, onCancel }: { onSuccess: () => void; onCancel: () => void }) {
+  const [input, setInput]     = useState("");
+  const [error, setError]     = useState(false);
+  const [shaking, setShaking] = useState(false);
+  const inputRef              = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const handleSubmit = () => {
+    if (input === UPDATE_PASSWORD) {
+      onSuccess();
+    } else {
+      setError(true);
+      setShaking(true);
+      setInput("");
+      setTimeout(() => setShaking(false), 400);
+      inputRef.current?.focus();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50">
+      <div
+        className="bg-white rounded-2xl shadow-2xl shadow-slate-900/15 w-[320px] p-6"
+        style={shaking ? { animation: "shake 0.4s ease-in-out" } : {}}
+      >
+        <h3 className="text-[14px] text-slate-800 mb-1">Enter Password</h3>
+        <p className="text-[12px] text-slate-500 mb-4">A password is required to update this order.</p>
+
+        <input
+          ref={inputRef}
+          type="password"
+          placeholder="Password"
+          value={input}
+          onChange={(e) => { setInput(e.target.value); setError(false); }}
+          onKeyDown={(e) => { if (e.key === "Enter") handleSubmit(); if (e.key === "Escape") onCancel(); }}
+          className={`w-full px-3 py-2 text-[13px] bg-slate-50 border rounded-lg placeholder-slate-300 text-slate-700 outline-none transition mb-1 ${
+            error
+              ? "border-red-300 focus:border-red-400 focus:ring-2 focus:ring-red-100"
+              : "border-slate-200 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          }`}
+        />
+        {error && <p className="text-[11px] text-red-500 mb-3">Incorrect password. Please try again.</p>}
+        {!error && <div className="mb-3" />}
+
+        <div className="flex gap-2">
+          <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50 transition">
+            Cancel
+          </button>
+          <button onClick={handleSubmit} disabled={!input.trim()}
+            className="flex-[2] py-2.5 rounded-xl bg-indigo-600 text-white text-[13px] hover:bg-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed transition">
+            Confirm
+          </button>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes shake {
+          0%,100% { transform: translateX(0); }
+          20%      { transform: translateX(-6px); }
+          40%      { transform: translateX(6px); }
+          60%      { transform: translateX(-4px); }
+          80%      { transform: translateX(4px); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 // ── Inner component (uses useSearchParams — must be inside Suspense) ──────────
 function POSContent() {
   const router       = useRouter();
@@ -163,6 +236,15 @@ function POSContent() {
   const [existingCategory, setExistingCategory] = useState<OrderCategory | null>(null);
   const [existingPax, setExistingPax]           = useState<number | null>(null);
 
+  // ── Snapshot of order items as loaded from server (excluding served state) ─
+  // Used to detect whether anything beyond checkboxes has changed.
+  const [originalOrderSnapshot, setOriginalOrderSnapshot] = useState<
+    { menu_id: number; quantity: number }[]
+  >([]);
+
+  // ── Password modal state ──────────────────────────────────────────────────
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+
   const totalBill             = orders.reduce((s, o) => s + o.subtotal, 0);
   const hc                    = parseInt(headcount) || 0;
   const discCalc              = calcMultiDiscount(totalBill, hc, discountRows);
@@ -173,6 +255,22 @@ function POSContent() {
   const canConfirm            = amountReceivedValid && discountValid;
   const allServed             = orders.length > 0 && orders.every((o) => o.served);
   const itemCount             = orders.reduce((s, o) => s + o.quantity, 0);
+
+  // ── Detect whether anything beyond served-checkboxes has changed ──────────
+  // Returns true only when items were added/removed/quantity-changed.
+  const hasOrderContentChanged = (): boolean => {
+    // Different number of line items → definitely changed
+    if (orders.length !== originalOrderSnapshot.length) return true;
+
+    // Sort both by menu_id for stable comparison
+    const current  = [...orders].sort((a, b) => a.menu_id - b.menu_id);
+    const original = [...originalOrderSnapshot].sort((a, b) => a.menu_id - b.menu_id);
+
+    return current.some((item, i) =>
+      item.menu_id  !== original[i].menu_id ||
+      item.quantity !== original[i].quantity
+    );
+  };
 
   // ── Fetch menu ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -197,18 +295,25 @@ function POSContent() {
       try {
         const res  = await axios.get(`${API}/orders/${orderId}`, { headers: authHeader(user.token) });
         const data = res.data.data;
-        setOrders(
-          data.items.map((i: any) => ({
-            localId:       `db-${i.order_item_id}`,
-            order_item_id: i.order_item_id,
-            menu_id:       i.menu_id,
-            menu_name:     i.menu_name,
-            price:         Number(i.price_at_time),
-            quantity:      i.quantity,
-            subtotal:      Number(i.price_at_time) * i.quantity,
-            served:        i.served,
-          }))
+
+        const loadedItems: OrderItem[] = data.items.map((i: any) => ({
+          localId:       `db-${i.order_item_id}`,
+          order_item_id: i.order_item_id,
+          menu_id:       i.menu_id,
+          menu_name:     i.menu_name,
+          price:         Number(i.price_at_time),
+          quantity:      i.quantity,
+          subtotal:      Number(i.price_at_time) * i.quantity,
+          served:        i.served,
+        }));
+
+        setOrders(loadedItems);
+
+        // Store the snapshot (menu_id + quantity only — served is excluded)
+        setOriginalOrderSnapshot(
+          loadedItems.map((i) => ({ menu_id: i.menu_id, quantity: i.quantity }))
         );
+
         setPaymentMethod(data.order_payment_method || "Cash");
         setExistingCategory(data.category ?? null);
         setExistingPax(data.pax ?? null);
@@ -326,6 +431,17 @@ function POSContent() {
     } catch (e) { console.error("Failed to update order:", e); }
     finally { setSaving(false); }
   };
+
+  // ── Password gate: only required when order content (not just checkboxes) changed ─
+  const handleUpdateOrderClick = () => {
+    if (hasOrderContentChanged()) {
+      setShowPasswordModal(true);
+    } else {
+      handleUpdateOrder();
+    }
+  };
+  const handlePasswordSuccess = () => { setShowPasswordModal(false); handleUpdateOrder(); };
+  const handlePasswordCancel  = () => setShowPasswordModal(false);
 
   const _executePayment = async (finalCategory: OrderCategory | null, slipOsNum: number | null = null) => {
     if (!orderId || !user) return;
@@ -582,7 +698,7 @@ function POSContent() {
               )}
               {isExisting ? (
                 <div className="flex gap-2">
-                  <button onClick={handleUpdateOrder} disabled={saving}
+                  <button onClick={handleUpdateOrderClick} disabled={saving}
                     className="flex-1 py-2.5 rounded-xl border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50 disabled:opacity-30 transition">
                     {saving ? "Saving..." : "Update Order"}
                   </button>
@@ -858,6 +974,14 @@ function POSContent() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── PASSWORD MODAL ── */}
+      {showPasswordModal && (
+        <UpdatePasswordModal
+          onSuccess={handlePasswordSuccess}
+          onCancel={handlePasswordCancel}
+        />
       )}
     </div>
   );

@@ -24,6 +24,204 @@ const PAYMENT_METHODS   = ["All", "Cash", "Credit / Debit", "E-Wallet", "Bank Tr
 const ORDER_STATUSES    = ["All", "Dine In", "Take Out"];
 const ORDER_CATEGORIES  = ["All", "official", "others"];
 
+// ── Print helper ──────────────────────────────────────────────────────────────
+function printSales(params: {
+  filtered:       SaleRecord[];
+  totalRevenue:   number;
+  totalDiscount:  number;
+  netRevenue:     number;
+  totalPaxDay:    number;
+  branchName:     string;
+  dateStr:        string;
+  filterPayment:  string;
+  filterStatus:   string;
+  filterCategory: string;
+}) {
+  const {
+    filtered, totalRevenue, totalDiscount, netRevenue,
+    totalPaxDay, branchName, dateStr,
+    filterPayment, filterStatus, filterCategory,
+  } = params;
+
+  const activeFilters = [
+    filterPayment  !== "All" && `Payment: ${filterPayment}`,
+    filterStatus   !== "All" && `Status: ${filterStatus}`,
+    filterCategory !== "All" && `Category: ${filterCategory}`,
+  ].filter(Boolean);
+
+  const rows = filtered.map((sale) => {
+    const time = new Date(sale.order_datetime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const net  = Number(sale.total_bill) - Number(sale.total_discount);
+    const hasDiscount = Number(sale.total_discount) > 0;
+    return `
+      <tr>
+        <td>
+          <span class="order-id">#${sale.order_id}</span>
+          ${sale.osNum ? `<span class="sub">OS #${sale.osNum}</span>` : ""}
+        </td>
+        <td>${time}</td>
+        <td>${sale.cashier_name ?? "—"}</td>
+        <td><span class="badge badge-${sale.status.toLowerCase().replace(" ", "-")}">${sale.status}</span></td>
+        <td>${sale.category ? `<span class="badge badge-${sale.category}">${sale.category}</span>` : "—"}</td>
+        <td>${sale.pax ?? "—"}</td>
+        <td>${sale.order_payment_method}</td>
+        <td class="amount">PHP ${Number(sale.total_bill).toFixed(2)}</td>
+        <td class="amount discount">${hasDiscount ? `− PHP ${Number(sale.total_discount).toFixed(2)}` : "—"}</td>
+        <td class="amount net">PHP ${net.toFixed(2)}</td>
+      </tr>`;
+  }).join("");
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Daily Sales Report — ${dateStr}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
+      font-size: 11px; color: #1e293b; background: #fff; padding: 32px 36px;
+    }
+    .header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #e2e8f0;
+    }
+    .header-left h1 { font-size: 20px; font-weight: 600; color: #0f172a; letter-spacing: -0.3px; }
+    .header-left .meta { display: flex; gap: 12px; margin-top: 4px; color: #64748b; font-size: 11px; }
+    .header-right { text-align: right; color: #94a3b8; font-size: 10px; line-height: 1.6; }
+    .filters-notice {
+      background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;
+      padding: 7px 12px; font-size: 10px; color: #64748b; margin-bottom: 16px;
+    }
+    .filters-notice strong { color: #475569; }
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+    .card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; }
+    .card .label { font-size: 9px; text-transform: uppercase; letter-spacing: 0.07em; color: #94a3b8; margin-bottom: 4px; }
+    .card .value { font-size: 17px; font-weight: 600; }
+    .card .sub   { font-size: 9px; color: #cbd5e1; margin-top: 2px; }
+    .value-default { color: #0f172a; }
+    .value-red     { color: #ef4444; }
+    .value-indigo  { color: #4f46e5; }
+    .value-emerald { color: #059669; }
+    .table-wrap { border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+    .table-header { padding: 9px 14px; border-bottom: 1px solid #f1f5f9; font-size: 10px; color: #94a3b8; }
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { background: #f8fafc; border-bottom: 1px solid #e2e8f0; }
+    th {
+      padding: 8px 12px; text-align: left; font-size: 9px; font-weight: 500;
+      text-transform: uppercase; letter-spacing: 0.07em; color: #94a3b8; white-space: nowrap;
+    }
+    td {
+      padding: 9px 12px; vertical-align: middle;
+      border-bottom: 1px solid #f1f5f9; color: #475569; font-size: 11px;
+    }
+    tr:last-child td { border-bottom: none; }
+    .order-id { color: #1e293b; font-weight: 500; display: block; }
+    .sub { display: block; font-size: 9px; color: #94a3b8; margin-top: 1px; }
+    .amount   { color: #334155; font-variant-numeric: tabular-nums; }
+    .discount { color: #ef4444; }
+    .net      { color: #1e293b; font-weight: 600; }
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 100px;
+      font-size: 10px; font-weight: 500; border: 1px solid transparent;
+    }
+    .badge-dine-in   { color: #4338ca; background: #eef2ff; border-color: #c7d2fe; }
+    .badge-take-out  { color: #059669; background: #ecfdf5; border-color: #a7f3d0; }
+    .badge-cancelled { color: #ef4444; background: #fef2f2; border-color: #fecaca; }
+    .badge-official  { color: #7c3aed; background: #f5f3ff; border-color: #ddd6fe; }
+    .badge-others    { color: #64748b; background: #f8fafc; border-color: #e2e8f0; }
+    .totals-row td {
+      border-top: 2px solid #e2e8f0; border-bottom: none; font-weight: 600;
+      color: #0f172a; background: #f8fafc; padding-top: 10px; padding-bottom: 10px;
+    }
+    .footer {
+      margin-top: 20px; display: flex; justify-content: space-between;
+      color: #94a3b8; font-size: 9px; padding-top: 12px; border-top: 1px solid #f1f5f9;
+    }
+    @media print {
+      body { padding: 18px 20px; }
+      @page { margin: 12mm; size: A4 landscape; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-left">
+      <h1>Daily Sales Report</h1>
+      <div class="meta">
+        <span>📍 ${branchName}</span>
+        <span>📅 ${dateStr}</span>
+        <span>🧾 ${filtered.length} transaction${filtered.length !== 1 ? "s" : ""}</span>
+      </div>
+    </div>
+    <div class="header-right">
+      Printed ${new Date().toLocaleString()}<br/>
+      ${branchName}
+    </div>
+  </div>
+
+  ${activeFilters.length > 0 ? `
+  <div class="filters-notice">
+    <strong>Active filters:</strong> ${activeFilters.join(" &nbsp;·&nbsp; ")}
+  </div>` : ""}
+
+  <div class="summary">
+    <div class="card">
+      <div class="label">Gross Sales</div>
+      <div class="value value-default">PHP ${totalRevenue.toFixed(2)}</div>
+    </div>
+    <div class="card">
+      <div class="label">Total Discounts</div>
+      <div class="value value-red">− PHP ${totalDiscount.toFixed(2)}</div>
+    </div>
+    <div class="card">
+      <div class="label">Net Sales</div>
+      <div class="value value-indigo">PHP ${netRevenue.toFixed(2)}</div>
+    </div>
+    <div class="card">
+      <div class="label">Total Pax Today</div>
+      <div class="value value-emerald">${totalPaxDay}</div>
+      <div class="sub">across all paid orders</div>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <div class="table-header">Showing ${filtered.length} transaction${filtered.length !== 1 ? "s" : ""}${activeFilters.length > 0 ? " (filtered)" : ""}</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Order</th><th>Time</th><th>Cashier</th><th>Status</th>
+          <th>Category</th><th>Pax</th><th>Payment</th>
+          <th>Bill</th><th>Discount</th><th>Net</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+        <tr class="totals-row">
+          <td colspan="7">Totals (${filtered.length} transaction${filtered.length !== 1 ? "s" : ""})</td>
+          <td class="amount">PHP ${totalRevenue.toFixed(2)}</td>
+          <td class="amount discount">${totalDiscount > 0 ? `− PHP ${totalDiscount.toFixed(2)}` : "—"}</td>
+          <td class="amount net">PHP ${netRevenue.toFixed(2)}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="footer">
+    <span>Generated by POS System · ${branchName}</span>
+    <span>${dateStr} · ${filtered.length} transaction${filtered.length !== 1 ? "s" : ""}</span>
+  </div>
+</body>
+</html>`;
+
+  const win = window.open("", "_blank", "width=1100,height=800");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { win.print(); }, 350);
+}
+
 export default function SalesPage() {
   const { branch, hydrated } = useSession();
   const router = useRouter();
@@ -97,6 +295,21 @@ export default function SalesPage() {
     "Bank Transfer":  "M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM9 22V12h6v10",
   };
 
+  const handlePrint = () => {
+    printSales({
+      filtered,
+      totalRevenue,
+      totalDiscount,
+      netRevenue,
+      totalPaxDay,
+      branchName:    branch?.branch_name ?? "Branch",
+      dateStr,
+      filterPayment,
+      filterStatus,
+      filterCategory,
+    });
+  };
+
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
 
@@ -117,6 +330,19 @@ export default function SalesPage() {
           <span className="text-[11px] text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">
             {filtered.length} transaction{filtered.length !== 1 ? "s" : ""}
           </span>
+          {/* ── Print button ── */}
+          <button
+            onClick={handlePrint}
+            disabled={loading || filtered.length === 0}
+            className="flex items-center gap-1.5 text-[11px] text-slate-600 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 bg-white px-2.5 py-1 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <polyline points="6 9 6 2 18 2 18 9"/>
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+              <rect x="6" y="14" width="12" height="8"/>
+            </svg>
+            Print / Save PDF
+          </button>
         </div>
       </header>
 
