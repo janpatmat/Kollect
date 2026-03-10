@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
+import * as XLSX from "xlsx";
 import { useSession } from "@/context/SessionContext";
 
 interface SaleRecord {
@@ -310,6 +311,43 @@ export default function SalesPage() {
     });
   };
 
+  const handleExportExcel = () => {
+    const rows = filtered.map((sale) => ({
+      "Order ID":       `#${sale.order_id}`,
+      "OS #":           sale.osNum ?? "",
+      "Time":           new Date(sale.order_datetime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      "Cashier":        sale.cashier_name ?? "",
+      "Status":         sale.status,
+      "Category":       sale.category ?? "",
+      "Pax":            sale.pax ?? "",
+      "Payment Method": sale.order_payment_method,
+      "Bill (PHP)":     Number(sale.total_bill),
+      "Discount (PHP)": Number(sale.total_discount),
+      "Net (PHP)":      Number(sale.total_bill) - Number(sale.total_discount),
+    }));
+
+    const summary = [
+      {},
+      { "Order ID": "SUMMARY",  "Bill (PHP)": "Gross Sales",     "Net (PHP)": totalRevenue },
+      { "Order ID": "",         "Bill (PHP)": "Total Discounts", "Net (PHP)": -totalDiscount },
+      { "Order ID": "",         "Bill (PHP)": "Net Sales",       "Net (PHP)": netRevenue },
+      { "Order ID": "",         "Bill (PHP)": "Total Pax Today", "Net (PHP)": totalPaxDay },
+    ];
+
+    const ws = XLSX.utils.json_to_sheet([...rows, ...summary]);
+
+    ws["!cols"] = [
+      { wch: 10 }, { wch: 8 }, { wch: 8 }, { wch: 16 }, { wch: 10 },
+      { wch: 10 }, { wch: 6 }, { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 12 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Daily Sales");
+
+    const filename = `sales_${new Date().toISOString().slice(0, 10)}_${branch?.branch_name ?? "branch"}.xlsx`;
+    XLSX.writeFile(wb, filename);
+  };
+
   return (
     <div className="flex flex-col h-screen bg-slate-50 overflow-hidden" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
 
@@ -330,6 +368,20 @@ export default function SalesPage() {
           <span className="text-[11px] text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">
             {filtered.length} transaction{filtered.length !== 1 ? "s" : ""}
           </span>
+          {/* ── Export Excel button ── */}
+          <button
+            onClick={handleExportExcel}
+            disabled={loading || filtered.length === 0}
+            className="flex items-center gap-1.5 text-[11px] text-emerald-700 border border-emerald-200 hover:border-emerald-300 hover:bg-emerald-50 bg-white px-2.5 py-1 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="12" y1="18" x2="12" y2="12"/>
+              <line x1="9" y1="15" x2="15" y2="15"/>
+            </svg>
+            Export Excel
+          </button>
           {/* ── Print button ── */}
           <button
             onClick={handlePrint}
