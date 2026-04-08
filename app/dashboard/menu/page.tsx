@@ -11,6 +11,7 @@ interface MenuItem {
   category_name: string;
   category_id:   number;
   price:         number;
+  grab_price:    number;
 }
 
 interface Category {
@@ -22,6 +23,7 @@ interface MenuForm {
   menu_name:   string;
   category_id: string;
   price:        string;
+  grab_price:  string;
 }
 
 const API = "http://localhost:5000";
@@ -38,10 +40,9 @@ export default function MenuPage() {
   const [error,        setError]        = useState<string | null>(null);
   const [search,       setSearch]       = useState("");
   const [form,         setForm]         = useState<MenuForm>({
-    menu_name: "", category_id: "", price: "",
+    menu_name: "", category_id: "", price: "", grab_price: "",
   });
 
-  // ── Fetch menu scoped to current branch ──────────────────────────────────
   const fetchMenu = async () => {
     if (!branch) return;
     try {
@@ -75,7 +76,7 @@ export default function MenuPage() {
 
   const openAddForm = () => {
     setEditItem(null);
-    setForm({ menu_name: "", category_id: "", price: "" });
+    setForm({ menu_name: "", category_id: "", price: "", grab_price: "" });
     setError(null);
     setShowForm(true);
   };
@@ -86,6 +87,7 @@ export default function MenuPage() {
       menu_name:   item.menu_name,
       category_id: String(item.category_id),
       price:       String(item.price),
+      grab_price:  String(item.grab_price ?? ""),
     });
     setError(null);
     setShowForm(true);
@@ -103,6 +105,7 @@ export default function MenuPage() {
         menu_name:   form.menu_name,
         category_id: Number(form.category_id),
         price:       Number(form.price),
+        grab_price:  form.grab_price !== "" ? Number(form.grab_price) : 0,
         branch_id:   branch.branch_id,
       };
 
@@ -112,14 +115,12 @@ export default function MenuPage() {
       };
 
       if (editItem) {
-        // UPDATE
         await axios.put(`${API}/menu/${editItem.menu_id}`, payload, { headers });
       } else {
-        // CREATE
         await axios.post(`${API}/menu`, payload, { headers });
       }
 
-      setForm({ menu_name: "", category_id: "", price: "" });
+      setForm({ menu_name: "", category_id: "", price: "", grab_price: "" });
       setShowForm(false);
       setEditItem(null);
       await fetchMenu();
@@ -209,6 +210,8 @@ export default function MenuPage() {
                   <th className="text-left text-[11px] text-slate-400 font-normal uppercase tracking-widest px-5 py-3">Name</th>
                   <th className="text-left text-[11px] text-slate-400 font-normal uppercase tracking-widest px-5 py-3">Category</th>
                   <th className="text-right text-[11px] text-slate-400 font-normal uppercase tracking-widest px-5 py-3">Price</th>
+                  {/* ── NEW: Grab Price column header ── */}
+                  <th className="text-right text-[11px] text-slate-400 font-normal uppercase tracking-widest px-5 py-3">Grab Price</th>
                   {user?.role === "admin" && (
                     <th className="px-5 py-3" />
                   )}
@@ -231,7 +234,15 @@ export default function MenuPage() {
                       <span className="text-[11px] text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">{item.category_name}</span>
                     </td>
                     <td className="px-5 py-3.5 text-right">
-                      <span className="text-[13px] text-slate-700">PHP {item.price.toFixed(2)}</span>
+                      <span className="text-[13px] text-slate-700">PHP {Number(item.price).toFixed(2)}</span>
+                    </td>
+                    {/* ── NEW: Grab Price column value ── */}
+                    <td className="px-5 py-3.5 text-right">
+                      {item.grab_price > 0 ? (
+                        <span className="text-[13px] text-orange-600">PHP {Number(item.grab_price).toFixed(2)}</span>
+                      ) : (
+                        <span className="text-[12px] text-slate-300">—</span>
+                      )}
                     </td>
                     {user?.role === "admin" && (
                       <td className="px-5 py-3.5 text-right">
@@ -300,6 +311,18 @@ export default function MenuPage() {
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[12px] text-slate-400">₱</span>
                   <input type="number" name="price" step="0.01" value={form.price} onChange={handleChange} placeholder="0.00"
                     className="w-full pl-8 pr-3.5 py-2.5 text-[13px] bg-slate-50 border border-slate-200 rounded-xl placeholder-slate-300 text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition" required/>
+                </div>
+              </div>
+
+              {/* ── Grab Price field ── */}
+              <div>
+                <label className="block text-[11px] text-slate-500 uppercase tracking-widest mb-1.5">
+                  Grab Price (PHP) <span className="normal-case text-slate-400 font-normal">(optional)</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[12px] text-slate-400">₱</span>
+                  <input type="number" name="grab_price" step="0.01" min="0" value={form.grab_price} onChange={handleChange} placeholder="0.00"
+                    className="w-full pl-8 pr-3.5 py-2.5 text-[13px] bg-slate-50 border border-slate-200 rounded-xl placeholder-slate-300 text-slate-700 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 transition"/>
                 </div>
               </div>
 
