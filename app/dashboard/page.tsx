@@ -11,7 +11,7 @@ interface OrderItem { order_item_id: number; menu_name: string; quantity: number
 interface Order { order_id: number; order_payment_method: string; order_datetime: string; status: string; total_bill: number; items: OrderItem[]; }
 interface DailyStats { dine_in: string; take_out: string; cancelled: string; }
 
-const API = "http://localhost:5000";
+const API = process.env.NEXT_PUBLIC_API_URL!;
 
 export default function Dashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
