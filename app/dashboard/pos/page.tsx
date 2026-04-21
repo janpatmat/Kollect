@@ -745,7 +745,7 @@ function POSContent() {
               {showCategoryMenu && (
                 <>
                   <div className="fixed inset-0 z-20" onClick={() => setShowCategoryMenu(false)} />
-                  <div className="absolute left-0 top-full mt-2 z-30 bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-900/10 py-1.5 min-w-[180px] overflow-hidden">
+                  <div className="absolute left-0 top-full mt-2 z-30 bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-900/10 py-1.5 min-w-[180px] overflow-y-auto max-h-[240px]"></div><div className="absolute left-0 top-full mt-2 z-30 bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-900/10 py-1.5 min-w-[180px] overflow-hidden">
                     <p className="px-3.5 pb-1.5 pt-0.5 text-[10px] text-slate-400 uppercase tracking-wider border-b border-slate-100 mb-1">Filter by category</p>
                     {[{ id: null, category_name: "All Items" }, ...categories].map((cat) => (
                       <button key={cat.id ?? "all"} onClick={() => { setSelectedCategory(cat.id); setShowCategoryMenu(false); }}
