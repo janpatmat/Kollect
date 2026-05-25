@@ -31,15 +31,13 @@ type DiscountType   = "Senior" | "PWD" | "Custom";
 interface DiscountRow { id: number; type: DiscountType; count: string; customRate: string; }
 type OrderType      = "Dine In" | "Take Out" | "Grab";
 type OrderCategory  = "official" | "others";
-// OrModalState: false = closed | "yesno" = ask OS/OR | "slip" = enter slip no | "credit" = credit/debit slip
 type OrModalState   = false | "yesno" | "slip" | "credit";
 
-// ── Split payment ─────────────────────────────────────────────────────────────
 type PaymentMethodLabel = "Cash" | "E-Wallet" | "Bank Transfer" | "Credit / Debit";
 
 interface SplitEntry {
   method: PaymentMethodLabel | "";
-  amount: string; // string for controlled input
+  amount: string;
 }
 
 const EMPTY_SPLIT: [SplitEntry, SplitEntry] = [
@@ -47,12 +45,9 @@ const EMPTY_SPLIT: [SplitEntry, SplitEntry] = [
   { method: "", amount: "" },
 ];
 
-// Returns true if either split method is Credit/Debit — forces automatic OR
 const splitHasCard = (entries: [SplitEntry, SplitEntry]): boolean =>
   entries.some((e) => e.method === "Credit / Debit");
 
-// Returns true if either split method is Cash or Bank Transfer — used for
-// OR/OS question logic. Mirrors single-payment behaviour for those methods.
 const splitNeedsOrOsQuestion = (entries: [SplitEntry, SplitEntry]): boolean =>
   !splitHasCard(entries) &&
   entries.some((e) => e.method === "Cash" || e.method === "Bank Transfer");
@@ -60,7 +55,7 @@ const splitNeedsOrOsQuestion = (entries: [SplitEntry, SplitEntry]): boolean =>
 const STEAK_CATEGORY_ID = 1;
 
 const isSteakSoldOut = (item: MenuItem): boolean =>
-  item.category_id === STEAK_CATEGORY_ID && item.availability === 0;
+  item.category_id === STEAK_CATEGORY_ID && (item.availability === 0 || item.availability === null);
 
 const getItemPrice = (item: MenuItem, orderType: OrderType): number =>
   orderType === "Grab" && item.grab_price != null
@@ -69,37 +64,51 @@ const getItemPrice = (item: MenuItem, orderType: OrderType): number =>
 
 function calcMultiDiscount(totalBill: number, headcount: number, rows: DiscountRow[]) {
   if (headcount <= 0) return { perPerson: 0, rows: [], totalDiscount: 0, amountDue: totalBill, discountedPeopleTotal: 0 };
-  const perPerson = totalBill / headcount;
+
+  // Round per-person share
+  const perPerson = Math.round(totalBill / headcount);
+
   let totalDiscountedPax = 0;
   const rowResults: { id: number; rowDiscount: number }[] = [];
+
   for (const row of rows) {
     const count = parseInt(row.count) || 0;
     const rate  = row.type === "PWD" ? 0.80 : row.type === "Senior" ? 0.80 : ((100 - (parseFloat(row.customRate) || 0)) / 100);
+
+    // Round each discounted row amount
     const rowDiscountedAmount = row.type === "Custom"
-      ? perPerson * rate * count
-      : (perPerson / 1.12) * rate * count;
+      ? Math.round(perPerson * rate * count)
+      : Math.round((perPerson / 1.12) * rate * count);
+
     const rowFullAmount = perPerson * count;
-    const rowDiscount = rowFullAmount - rowDiscountedAmount;
+    const rowDiscount   = Math.round(rowFullAmount - rowDiscountedAmount);
+
     totalDiscountedPax += count;
     rowResults.push({ id: row.id, rowDiscount });
   }
-  const remainingPax          = headcount - totalDiscountedPax;
-  const fullPricedAmount      = perPerson * remainingPax;
+
+  const remainingPax     = headcount - totalDiscountedPax;
+  const fullPricedAmount = Math.round(perPerson * remainingPax);
+
   const discountedPortionsSum = rowResults.reduce((sum, r) => {
     const row   = rows.find((ro) => ro.id === r.id)!;
     const count = parseInt(row.count) || 0;
     const rate  = row.type === "PWD" ? 0.80 : row.type === "Senior" ? 0.80 : ((100 - (parseFloat(row.customRate) || 0)) / 100);
-    return sum + (row.type === "Custom"
-      ? perPerson * rate * count
-      : (perPerson / 1.12) * rate * count);
+    const amt   = row.type === "Custom"
+      ? Math.round(perPerson * rate * count)
+      : Math.round((perPerson / 1.12) * rate * count);
+    return sum + amt;
   }, 0);
+
   const totalDiscountedBill = discountedPortionsSum + fullPricedAmount;
-  const totalDiscount       = totalBill - totalDiscountedBill;
+  const totalDiscount       = Math.round(Math.max(0, totalBill - totalDiscountedBill));
+  const amountDue           = Math.round(Math.max(0, totalDiscountedBill));
+
   return {
     perPerson,
     rows:                  rowResults,
-    totalDiscount:         Math.max(0, totalDiscount),
-    amountDue:             Math.max(0, totalDiscountedBill),
+    totalDiscount,
+    amountDue,
     discountedPeopleTotal: totalDiscountedPax,
   };
 }
@@ -160,7 +169,6 @@ function UpdatePasswordModal({ onSuccess, onCancel }: { onSuccess: () => void; o
   );
 }
 
-// ── Split Payment UI ──────────────────────────────────────────────────────────
 function SplitPaymentPanel({
   entries,
   amountDue,
@@ -180,7 +188,6 @@ function SplitPaymentPanel({
   const sumOk  = Math.abs(sum - amountDue) < 0.01;
   const sumErr = entries[0].amount !== "" && entries[1].amount !== "" && !sumOk;
 
-  // Each selector should exclude the method already chosen by the other entry
   const otherMethod = (idx: 0 | 1) => entries[idx === 0 ? 1 : 0].method;
 
   return (
@@ -191,8 +198,6 @@ function SplitPaymentPanel({
         return (
           <div key={idx} className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2.5">
             <p className="text-[10px] text-slate-400 uppercase tracking-widest">Payment {idx + 1}</p>
-
-            {/* Method selector */}
             <div>
               <label className="text-[11px] text-slate-500 block mb-1">Method</label>
               <div className="grid grid-cols-2 gap-1.5">
@@ -221,8 +226,6 @@ function SplitPaymentPanel({
                 })}
               </div>
             </div>
-
-            {/* Amount input */}
             <div>
               <label className="text-[11px] text-slate-500 block mb-1">Amount (PHP)</label>
               <div className="relative">
@@ -245,8 +248,6 @@ function SplitPaymentPanel({
           </div>
         );
       })}
-
-      {/* Running total validation */}
       <div className={`flex justify-between items-center px-3 py-2 rounded-lg border text-[12px] transition-colors ${
         sumErr
           ? "bg-red-50 border-red-100 text-red-600"
@@ -265,7 +266,6 @@ function SplitPaymentPanel({
   );
 }
 
-// ── Main POS component ────────────────────────────────────────────────────────
 function POSContent() {
   const router       = useRouter();
   const searchParams = useSearchParams();
@@ -305,7 +305,6 @@ function POSContent() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showCategoryMenu, setShowCategoryMenu]   = useState(false);
 
-  // ── Split payment state ────────────────────────────────────────────────────
   const [isSplitPayment, setIsSplitPayment]   = useState(false);
   const [splitEntries, setSplitEntries]       = useState<[SplitEntry, SplitEntry]>(EMPTY_SPLIT);
 
@@ -315,16 +314,16 @@ function POSContent() {
   const discountedOverLimit = hc > 0 && discCalc.discountedPeopleTotal > hc;
   const discountValid       = !discountedOverLimit;
 
-  // Split-specific derived values
   const splitSum   = (parseFloat(splitEntries[0].amount) || 0) + (parseFloat(splitEntries[1].amount) || 0);
   const splitSumOk = Math.abs(splitSum - discCalc.amountDue) < 0.01;
   const splitMethodsSelected = splitEntries[0].method !== "" && splitEntries[1].method !== "";
 
-  // Single payment amount validation — exact match required (no change)
-  const amountReceivedNum   = parseFloat(amountReceived);
+  // Cash: accept any amount >= amount due; other methods: always valid
+  const amountReceivedNum   = parseFloat(amountReceived) || 0;
+  const cashChange          = amountReceivedNum - discCalc.amountDue;
   const amountReceivedValid = paymentMethod !== "Cash"
     ? true
-    : amountReceived !== "" && Math.abs(amountReceivedNum - discCalc.amountDue) < 0.01;
+    : amountReceived !== "" && amountReceivedNum >= discCalc.amountDue;
 
   const canConfirm = isSplitPayment
     ? splitSumOk && splitMethodsSelected && discountValid
@@ -333,7 +332,6 @@ function POSContent() {
   const allServed  = orders.length > 0 && orders.every((o) => o.served);
   const itemCount  = orders.reduce((s, o) => s + o.quantity, 0);
 
-  // Toggle split: reset all payment-related state on mode switch
   const handleToggleSplit = (enable: boolean) => {
     setIsSplitPayment(enable);
     setSplitEntries(EMPTY_SPLIT);
@@ -548,10 +546,6 @@ function POSContent() {
   const handlePasswordSuccess = () => { setShowPasswordModal(false); handleUpdateOrder(); };
   const handlePasswordCancel  = () => setShowPasswordModal(false);
 
-  // ── Payment execution ──────────────────────────────────────────────────────
-  // Handles both single and split payment. The `splitPayments` arg is only
-  // present when isSplitPayment is true; otherwise the single-payment path runs.
-
   const _executePayment = async (
     finalCategory: OrderCategory | null,
     slipOsNum: number | null = null,
@@ -560,7 +554,6 @@ function POSContent() {
     if (!orderId || !user) return;
     setSaving(true);
     try {
-      // Always sync items first (update order)
       await axios.put(`${API}/orders/${orderId}`,
         { payment_method: isSplitPayment ? splitEntries[0].method : paymentMethod, items: buildItemsPayload() },
         { headers: authHeader(user.token) });
@@ -568,7 +561,6 @@ function POSContent() {
       const paxToSend = hc > 0 ? hc : existingPax !== null ? existingPax : undefined;
 
       if (splitPayments && splitPayments.length === 2) {
-        // Split payment path
         await axios.patch(`${API}/orders/${orderId}/pay`,
           {
             payments:       splitPayments,
@@ -580,7 +572,6 @@ function POSContent() {
           },
           { headers: authHeader(user.token) });
       } else {
-        // Single payment path (unchanged)
         await axios.patch(`${API}/orders/${orderId}/pay`,
           {
             payment_method: paymentMethod,
@@ -599,23 +590,11 @@ function POSContent() {
     finally { setSaving(false); }
   };
 
-  // ── OR/OS routing logic ────────────────────────────────────────────────────
-  // Determines which modal flow to enter based on payment method(s).
-  //
-  // Split rules:
-  //   - Any Credit/Debit in split → automatic OR, go straight to slip entry
-  //   - Otherwise (Cash/BankTransfer mix) → ask yesno
-  //
-  // Single rules (unchanged):
-  //   - Credit/Debit → automatic OR (credit modal)
-  //   - Cash / E-Wallet / Bank Transfer → ask yesno
-
   const handleConfirmPayment = async () => {
     if (!orderId || !canConfirm || !user) return;
 
     const cat = existingCategory;
 
-    // Already official — pay immediately, no OR/OS question
     if (cat === "official") {
       if (isSplitPayment) {
         await _executePayment(null, null, [
@@ -628,19 +607,15 @@ function POSContent() {
       return;
     }
 
-    // "others" category — determine OR/OS flow
     if (isSplitPayment) {
       if (splitHasCard(splitEntries)) {
-        // Credit/Debit in split → automatic OR, enter slip number
         setOrSlipNumber("");
         setShowOrModal("credit");
       } else {
-        // Cash/BankTransfer only in split → ask yesno
         setOrSlipNumber("");
         setShowOrModal("yesno");
       }
     } else {
-      // Single payment — original logic preserved exactly
       if (paymentMethod === "Credit / Debit") {
         setOrSlipNumber("");
         setShowOrModal("credit");
@@ -655,7 +630,6 @@ function POSContent() {
     }
   };
 
-  // OR/OS modal handlers — pass splitPayments when in split mode
   const handleOrNo = async () => {
     setShowOrModal(false);
     if (isSplitPayment) {
@@ -688,6 +662,30 @@ function POSContent() {
     if (!orderId || !user || !confirm("Cancel this order?")) return;
     try {
       await axios.patch(`${API}/orders/${orderId}/cancel`, {}, { headers: authHeader(user.token) });
+
+      // Restore steak availability for items that were in the cancelled order.
+      // Only restore if availability is already tracked (not null).
+      const steakOrders = orders.filter((o) => {
+        const menuItem = menuItems.find((m) => m.menu_id === o.menu_id);
+        return menuItem?.category_id === STEAK_CATEGORY_ID && menuItem.availability !== null;
+      });
+
+      if (steakOrders.length > 0 && branch) {
+        await Promise.allSettled(
+          steakOrders.map((o) => {
+            const menuItem = menuItems.find((m) => m.menu_id === o.menu_id)!;
+            const restored = (menuItem.availability as number) + o.quantity;
+            return axios
+              .patch(
+                `${API}/menu/${o.menu_id}/availability`,
+                { availability: restored, branch_id: branch.branch_id },
+                { headers: authHeader(user.token) }
+              )
+              .catch((e) => console.error(`Failed to restore availability for menu_id ${o.menu_id}:`, e));
+          })
+        );
+      }
+
       localStorage.removeItem(TABLE_KEY(orderId));
       router.push("/dashboard");
     } catch (e) { console.error("Failed to cancel order:", e); }
@@ -1030,7 +1028,7 @@ function POSContent() {
                     className="w-full px-3 py-2 text-[13px] bg-white border border-slate-200 rounded-lg placeholder-slate-300 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition"/>
                   {hc > 0 && (
                     <p className="text-[11px] text-slate-400 mt-1">
-                      Share per person: <span className="text-slate-600">PHP {discCalc.perPerson.toFixed(2)}</span>
+                      Share per person: <span className="text-slate-600">PHP {discCalc.perPerson}</span>
                     </p>
                   )}
                 </div>
@@ -1078,11 +1076,11 @@ function POSContent() {
                           <div className="flex items-center justify-between pt-1.5 border-t border-slate-200">
                             <span className="text-[11px] text-slate-400">
                               {count > 0 && effectiveRate > 0
-                                ? `${count} × PHP ${discCalc.perPerson.toFixed(2)} × ${(effectiveRate * 100).toFixed(0)}%`
+                                ? `${count} × PHP ${discCalc.perPerson} × ${(effectiveRate * 100).toFixed(0)}%`
                                 : "Enter count & rate"}
                             </span>
                             <span className={`text-[11px] font-medium ${rowDiscount > 0 ? "text-red-500" : "text-slate-300"}`}>
-                              {rowDiscount > 0 ? `− PHP ${rowDiscount.toFixed(2)}` : "—"}
+                              {rowDiscount > 0 ? `− PHP ${rowDiscount}` : "—"}
                             </span>
                           </div>
                         </div>
@@ -1107,8 +1105,8 @@ function POSContent() {
                 {discCalc.totalDiscount > 0 && discountValid && (
                   <div className="mt-3 bg-white border border-slate-200 rounded-xl px-4 py-3 space-y-1.5">
                     <div className="flex justify-between text-[11px] text-slate-500"><span>Bill Total</span><span>PHP {totalBill.toFixed(2)}</span></div>
-                    <div className="flex justify-between text-[11px] text-red-500"><span>Total Discount ({discCalc.discountedPeopleTotal} pax)</span><span>− PHP {discCalc.totalDiscount.toFixed(2)}</span></div>
-                    <div className="flex justify-between text-[13px] text-slate-800 font-medium pt-1.5 border-t border-slate-100"><span>Amount Due</span><span>PHP {discCalc.amountDue.toFixed(2)}</span></div>
+                    <div className="flex justify-between text-[11px] text-red-500"><span>Total Discount ({discCalc.discountedPeopleTotal} pax)</span><span>− PHP {discCalc.totalDiscount}</span></div>
+                    <div className="flex justify-between text-[13px] text-slate-800 font-medium pt-1.5 border-t border-slate-100"><span>Amount Due</span><span>PHP {discCalc.amountDue}</span></div>
                   </div>
                 )}
               </div>
@@ -1117,7 +1115,6 @@ function POSContent() {
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-[10px] text-slate-400 uppercase tracking-widest">Payment Method</p>
-                  {/* Split payment toggle */}
                   <button
                     onClick={() => handleToggleSplit(!isSplitPayment)}
                     className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[11px] transition-all ${
@@ -1133,7 +1130,6 @@ function POSContent() {
                 </div>
 
                 {isSplitPayment ? (
-                  // ── Split payment UI ────────────────────────────────────────
                   <>
                     <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 mb-3">
                       <svg width="13" height="13" fill="none" stroke="#6366f1" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
@@ -1150,7 +1146,6 @@ function POSContent() {
                     />
                   </>
                 ) : (
-                  // ── Single payment UI (unchanged) ───────────────────────────
                   <>
                     <div className="space-y-1.5">
                       {PAYMENT_METHODS.map((m) => (
@@ -1163,20 +1158,20 @@ function POSContent() {
                       ))}
                     </div>
 
-                    {/* Cash: exact amount input — no change shown */}
+                    {/* Cash: accept >= amount due, show change */}
                     {paymentMethod === "Cash" && (
                       <div className="mt-3 bg-slate-50 border border-slate-100 rounded-xl p-3.5">
                         <label className="text-[11px] text-slate-500 block mb-1">
                           Amount Received (PHP)
-                          <span className="ml-1 text-slate-400 font-normal">— exact amount required</span>
+                          <span className="ml-1 text-slate-400 font-normal">— must be ≥ amount due</span>
                         </label>
                         <div className="relative">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[12px] text-slate-400">₱</span>
                           <input
                             type="number"
-                            min="0.01"
-                            step="0.01"
-                            placeholder={discCalc.amountDue.toFixed(2)}
+                            min={discCalc.amountDue}
+                            step="1"
+                            placeholder={String(discCalc.amountDue)}
                             value={amountReceived}
                             onChange={(e) => setAmountReceived(e.target.value)}
                             className={`w-full pl-7 pr-3 py-2 text-[13px] bg-white border rounded-lg placeholder-slate-300 outline-none transition ${
@@ -1188,11 +1183,17 @@ function POSContent() {
                         </div>
                         {amountReceived !== "" && !amountReceivedValid && (
                           <p className="text-[11px] text-red-500 mt-1">
-                            Amount must be exactly PHP {discCalc.amountDue.toFixed(2)}
+                            Amount must be at least PHP {discCalc.amountDue}
                           </p>
                         )}
-                        {amountReceived !== "" && amountReceivedValid && (
-                          <p className="text-[11px] text-emerald-600 mt-1">✓ Amount matches</p>
+                        {amountReceived !== "" && amountReceivedValid && cashChange === 0 && (
+                          <p className="text-[11px] text-emerald-600 mt-1">✓ Exact amount</p>
+                        )}
+                        {amountReceived !== "" && amountReceivedValid && cashChange > 0 && (
+                          <div className="mt-2 flex items-center justify-between bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                            <span className="text-[11px] text-emerald-700">Change</span>
+                            <span className="text-[13px] text-emerald-700 font-medium">PHP {Math.round(cashChange)}</span>
+                          </div>
                         )}
                       </div>
                     )}
@@ -1207,7 +1208,7 @@ function POSContent() {
                 className="w-full bg-indigo-600 text-white text-[13px] py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed transition tracking-wide flex items-center justify-center gap-2">
                 {saving
                   ? (<><svg className="animate-spin" width="13" height="13" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>Processing...</>)
-                  : `Confirm Payment · PHP ${discCalc.amountDue.toFixed(2)}`
+                  : `Confirm Payment · PHP ${discCalc.amountDue}`
                 }
               </button>
               <button onClick={() => setStep("select")} className="w-full text-[11px] text-slate-400 hover:text-slate-600 py-1.5 transition">← Back to order</button>
