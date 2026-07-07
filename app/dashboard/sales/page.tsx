@@ -32,7 +32,7 @@ const PAYMENT_METHODS  = ["All", "Cash", "Credit / Debit", "E-Wallet", "Bank Tra
 const ORDER_STATUSES   = ["All", "Dine In", "Take Out", "Grab"];
 const ORDER_CATEGORIES = ["All", "official", "others"];
 
-const OS_PASSWORD = "orchange321";
+const EDIT_PASSWORD = "orchange321";
 
 // ── Print helper (unchanged) ──────────────────────────────────────────────────
 function printSales(params: {
@@ -189,7 +189,7 @@ function PasswordModal({ onConfirm, onCancel, error }: PasswordModalProps) {
             </div>
             <div>
               <p className="text-[13px] font-semibold text-slate-800">Authorization Required</p>
-              <p className="text-[11px] text-slate-400">Enter password to edit OS/OR number</p>
+              <p className="text-[11px] text-slate-400">Enter password to edit this order</p>
             </div>
           </div>
         </div>
@@ -229,38 +229,67 @@ function PasswordModal({ onConfirm, onCancel, error }: PasswordModalProps) {
   );
 }
 
-// ── Edit OS Number Modal ──────────────────────────────────────────────────────
-interface EditOsModalProps {
-  orderId:    number;
-  currentOs:  number | null;
-  onSave:     (newOs: number) => Promise<void>;
+// ── Edit Order Modal ───────────────────────────────────────────────────────────
+const EDITABLE_PAYMENT_METHODS = PAYMENT_METHODS.filter((m) => m !== "All");
+const EDITABLE_STATUSES        = ORDER_STATUSES.filter((s) => s !== "All");
+const EDITABLE_CATEGORIES      = ORDER_CATEGORIES.filter((c) => c !== "All") as ("official" | "others")[];
+
+interface OrderDetailsUpdate {
+  payment_method: string;
+  status:         string;
+  category:       "official" | "others";
+  pax:            number | null;
+  os_num:         number | null;
+  total_bill:     number;
+  total_discount: number;
+}
+
+interface EditOrderModalProps {
+  sale:       SaleRecord;
+  onSave:     (updates: OrderDetailsUpdate) => Promise<void>;
   onCancel:   () => void;
   isSaving:   boolean;
   saveError:  string;
 }
 
-function EditOsModal({ orderId, currentOs, onSave, onCancel, isSaving, saveError }: EditOsModalProps) {
-  const [value, setValue] = useState(currentOs?.toString() ?? "");
-  const inputRef = useRef<HTMLInputElement>(null);
+function EditOrderModal({ sale, onSave, onCancel, isSaving, saveError }: EditOrderModalProps) {
+  const [paymentMethod, setPaymentMethod] = useState(sale.order_payment_method);
+  const [status,        setStatus]        = useState(sale.status);
+  const [category,      setCategory]      = useState<"official" | "others">(sale.category ?? "others");
+  const [pax,           setPax]           = useState(sale.pax?.toString() ?? "");
+  const [osNum,         setOsNum]         = useState(sale.osNum?.toString() ?? "");
+  const [totalBill,     setTotalBill]     = useState(String(sale.total_bill));
+  const [totalDiscount, setTotalDiscount] = useState(String(sale.total_discount));
 
-  useEffect(() => {
-    inputRef.current?.focus();
-    inputRef.current?.select();
-  }, []);
+  const paxNum           = pax.trim()   === "" ? null : parseInt(pax);
+  const osNumNum         = osNum.trim() === "" ? null : parseInt(osNum);
+  const totalBillNum     = parseFloat(totalBill);
+  const totalDiscountNum = parseFloat(totalDiscount);
+
+  const isValid =
+    (pax.trim()   === "" || (Number.isInteger(paxNum)   && (paxNum   as number) >= 1)) &&
+    (osNum.trim() === "" || (Number.isInteger(osNumNum) && (osNumNum as number) >= 1)) &&
+    !isNaN(totalBillNum)     && totalBillNum     >= 0 &&
+    !isNaN(totalDiscountNum) && totalDiscountNum >= 0;
 
   const handleSave = () => {
-    const parsed = parseInt(value);
-    if (isNaN(parsed) || parsed < 1) return;
-    onSave(parsed);
+    if (!isValid) return;
+    onSave({
+      payment_method: paymentMethod,
+      status,
+      category,
+      pax:            paxNum,
+      os_num:         osNumNum,
+      total_bill:     totalBillNum,
+      total_discount: totalDiscountNum,
+    });
   };
-
-  const isValid = !isNaN(parseInt(value)) && parseInt(value) >= 1;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(15,23,42,0.45)", backdropFilter: "blur(2px)" }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-[360px] overflow-hidden" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-[400px] max-h-[88vh] flex flex-col overflow-hidden" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
         {/* Header */}
-        <div className="px-6 pt-6 pb-4 border-b border-slate-100">
+        <div className="px-6 pt-6 pb-4 border-b border-slate-100 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center flex-shrink-0">
               <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" className="text-indigo-500">
@@ -268,57 +297,101 @@ function EditOsModal({ orderId, currentOs, onSave, onCancel, isSaving, saveError
               </svg>
             </div>
             <div>
-              <p className="text-[13px] font-semibold text-slate-800">Edit OS/OR Number</p>
-              <p className="text-[11px] text-slate-400">Order #{orderId}</p>
+              <p className="text-[13px] font-semibold text-slate-800">Edit Order</p>
+              <p className="text-[11px] text-slate-400">Order #{sale.order_id}</p>
             </div>
           </div>
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5 space-y-4">
-          {currentOs !== null && (
-            <div className="bg-slate-50 border border-slate-100 rounded-lg px-3 py-2.5 flex items-center gap-2">
-              <span className="text-[10px] uppercase tracking-widest text-slate-400">Current</span>
-              <span className="text-[13px] text-slate-600 font-medium ml-auto">#{currentOs}</span>
-            </div>
-          )}
+        <div className="px-6 py-5 space-y-4 overflow-y-auto" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
           <div>
-            <label className="text-[10px] uppercase tracking-widest text-slate-400 block mb-1.5">New OS/OR Number</label>
-            <input
-              ref={inputRef}
-              type="number"
-              min={1}
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && isValid && !isSaving) handleSave(); }}
-              placeholder="e.g. 1042"
-              className="w-full text-[13px] text-slate-700 border border-slate-200 rounded-lg px-3 py-2.5 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50 transition-all placeholder:text-slate-300"
-            />
-            {saveError && (
-              <p className="text-[11px] text-red-500 mt-1.5 flex items-center gap-1">
-                <svg width="11" height="11" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>
-                {saveError}
-              </p>
-            )}
+            <label className="text-[10px] uppercase tracking-widest text-slate-400 block mb-1.5">Payment Method</label>
+            <div className="flex flex-wrap gap-1.5">
+              {EDITABLE_PAYMENT_METHODS.map((m) => (
+                <button key={m} type="button" onClick={() => setPaymentMethod(m)}
+                  className={`text-[12px] px-2.5 py-1.5 rounded-lg border transition-all ${paymentMethod === m ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+                  {m}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="flex gap-2">
-            <button onClick={onCancel} disabled={isSaving} className="flex-1 text-[12px] text-slate-500 border border-slate-200 hover:bg-slate-50 py-2 rounded-lg transition-colors disabled:opacity-50">
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={!isValid || isSaving}
-              className="flex-1 text-[12px] text-white bg-indigo-600 hover:bg-indigo-700 py-2 rounded-lg transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
-            >
-              {isSaving ? (
-                <>
-                  <svg className="animate-spin" width="12" height="12" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>
-                  Saving…
-                </>
-              ) : "Save"}
-            </button>
+          <div>
+            <label className="text-[10px] uppercase tracking-widest text-slate-400 block mb-1.5">Status</label>
+            <div className="flex flex-wrap gap-1.5">
+              {EDITABLE_STATUSES.map((s) => (
+                <button key={s} type="button" onClick={() => setStatus(s)}
+                  className={`text-[12px] px-2.5 py-1.5 rounded-lg border transition-all ${status === s ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+                  {s}
+                </button>
+              ))}
+            </div>
           </div>
+
+          <div>
+            <label className="text-[10px] uppercase tracking-widest text-slate-400 block mb-1.5">Category</label>
+            <div className="flex gap-1.5">
+              {EDITABLE_CATEGORIES.map((c) => (
+                <button key={c} type="button" onClick={() => setCategory(c)}
+                  className={`text-[12px] px-2.5 py-1.5 rounded-lg border capitalize transition-all ${category === c ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+                  {c}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] uppercase tracking-widest text-slate-400 block mb-1.5">Pax</label>
+              <input type="number" min={1} value={pax} onChange={(e) => setPax(e.target.value)} placeholder="—"
+                className="w-full text-[13px] text-slate-700 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50 transition-all placeholder:text-slate-300"/>
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-widest text-slate-400 block mb-1.5">OS/OR Number</label>
+              <input type="number" min={1} value={osNum} onChange={(e) => setOsNum(e.target.value)} placeholder="—"
+                className="w-full text-[13px] text-slate-700 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50 transition-all placeholder:text-slate-300"/>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] uppercase tracking-widest text-slate-400 block mb-1.5">Total Bill (PHP)</label>
+              <input type="number" min={0} step="0.01" value={totalBill} onChange={(e) => setTotalBill(e.target.value)}
+                className="w-full text-[13px] text-slate-700 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50 transition-all"/>
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-widest text-slate-400 block mb-1.5">Discount (PHP)</label>
+              <input type="number" min={0} step="0.01" value={totalDiscount} onChange={(e) => setTotalDiscount(e.target.value)}
+                className="w-full text-[13px] text-slate-700 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-50 transition-all"/>
+            </div>
+          </div>
+
+          {saveError && (
+            <p className="text-[11px] text-red-500 flex items-center gap-1">
+              <svg width="11" height="11" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>
+              {saveError}
+            </p>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-slate-100 flex gap-2 flex-shrink-0">
+          <button onClick={onCancel} disabled={isSaving} className="flex-1 text-[12px] text-slate-500 border border-slate-200 hover:bg-slate-50 py-2 rounded-lg transition-colors disabled:opacity-50">
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={!isValid || isSaving}
+            className="flex-1 text-[12px] text-white bg-indigo-600 hover:bg-indigo-700 py-2 rounded-lg transition-colors font-medium disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+          >
+            {isSaving ? (
+              <>
+                <svg className="animate-spin" width="12" height="12" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>
+                Saving…
+              </>
+            ) : "Save Changes"}
+          </button>
         </div>
       </div>
     </div>
@@ -429,8 +502,8 @@ export default function SalesPage() {
   const [highlightedIds, setHighlightedIds] = useState<Set<number>>(new Set());
 
   // ── Password modal state ──────────────────────────────────────────────────
-  type PasswordStep = { phase: "password"; targetOrderId: number; targetCurrentOs: number | null };
-  type EditStep     = { phase: "edit";     targetOrderId: number; targetCurrentOs: number | null };
+  type PasswordStep = { phase: "password"; targetSale: SaleRecord };
+  type EditStep     = { phase: "edit";     targetSale: SaleRecord };
   type ModalState   = PasswordStep | EditStep | null;
 
   const [modalState,     setModalState]     = useState<ModalState>(null);
@@ -474,19 +547,19 @@ export default function SalesPage() {
   const netRevenue    = totalRevenue - totalDiscount;
 
   // ── Password flow ─────────────────────────────────────────────────────────
-  const openEditFlow = (orderId: number, currentOs: number | null) => {
+  const openEditFlow = (sale: SaleRecord) => {
     setPasswordError("");
-    setModalState({ phase: "password", targetOrderId: orderId, targetCurrentOs: currentOs });
+    setModalState({ phase: "password", targetSale: sale });
   };
 
   const handlePasswordConfirm = (pw: string) => {
-    if (pw !== OS_PASSWORD) {
+    if (pw !== EDIT_PASSWORD) {
       setPasswordError("Incorrect password. Please try again.");
       return;
     }
     if (!modalState) return;
     setPasswordError("");
-    setModalState({ phase: "edit", targetOrderId: modalState.targetOrderId, targetCurrentOs: modalState.targetCurrentOs });
+    setModalState({ phase: "edit", targetSale: modalState.targetSale });
   };
 
   const handlePasswordCancel = () => {
@@ -494,18 +567,30 @@ export default function SalesPage() {
     setPasswordError("");
   };
 
-  // ── Save OS number ────────────────────────────────────────────────────────
-  const handleSaveOs = async (newOs: number) => {
+  // ── Save order details ────────────────────────────────────────────────────
+  const handleSaveOrder = async (updates: OrderDetailsUpdate) => {
     if (!modalState) return;
-    const { targetOrderId } = modalState;
+    const targetOrderId = modalState.targetSale.order_id;
     setIsSaving(true);
     setSaveError("");
     try {
-      await axios.patch(`${API}/activity/orders/${targetOrderId}/osnumber`, { os_num: newOs });
+      await axios.patch(`${API}/activity/orders/${targetOrderId}/details`, updates);
 
       // Update local sales state
       setSales((prev) =>
-        prev.map((s) => s.order_id === targetOrderId ? { ...s, osNum: newOs } : s)
+        prev.map((s) => s.order_id === targetOrderId
+          ? {
+              ...s,
+              order_payment_method: updates.payment_method,
+              status:                updates.status,
+              category:              updates.category,
+              pax:                   updates.pax,
+              osNum:                 updates.os_num,
+              total_bill:            updates.total_bill,
+              total_discount:        updates.total_discount,
+            }
+          : s
+        )
       );
 
       // Permanently highlight the row
@@ -513,7 +598,7 @@ export default function SalesPage() {
 
       setModalState(null);
     } catch (err: any) {
-      const msg = err?.response?.data?.error ?? "Failed to update OS/OR number.";
+      const msg = err?.response?.data?.error ?? "Failed to update order.";
       setSaveError(msg);
     } finally {
       setIsSaving(false);
@@ -620,10 +705,9 @@ export default function SalesPage() {
         />
       )}
       {modalState?.phase === "edit" && (
-        <EditOsModal
-          orderId={modalState.targetOrderId}
-          currentOs={modalState.targetCurrentOs}
-          onSave={handleSaveOs}
+        <EditOrderModal
+          sale={modalState.targetSale}
+          onSave={handleSaveOrder}
           onCancel={handleEditCancel}
           isSaving={isSaving}
           saveError={saveError}
@@ -773,10 +857,10 @@ export default function SalesPage() {
                           ) : (
                             <p className="text-[10px] text-slate-300 italic">No OS #</p>
                           )}
-                          {/* Edit OS button */}
+                          {/* Edit order button */}
                           <button
-                            onClick={() => openEditFlow(sale.order_id, sale.osNum)}
-                            title="Edit OS/OR number"
+                            onClick={() => openEditFlow(sale)}
+                            title="Edit order"
                             className="w-4 h-4 rounded flex items-center justify-center text-slate-300 hover:text-indigo-500 hover:bg-indigo-50 transition-colors ml-0.5"
                           >
                             <svg width="9" height="9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">

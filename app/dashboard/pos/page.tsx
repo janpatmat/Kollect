@@ -456,7 +456,8 @@ function POSContent() {
     orders.map((o) => ({
       menu_id:  o.menu_id,
       quantity: o.quantity,
-      ...(o.order_item_id ? { order_item_id: o.order_item_id, served: o.served } : {}),
+      served:   o.served,
+      ...(o.order_item_id ? { order_item_id: o.order_item_id } : {}),
     }));
 
   const decrementSteakAvailability = async (items: { menu_id: number; quantity: number }[]) => {
