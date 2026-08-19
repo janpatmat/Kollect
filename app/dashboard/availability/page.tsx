@@ -4,18 +4,20 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import { useSession } from "@/context/SessionContext";
+import { API } from "@/lib/api";
 
 interface SteakItem {
   menu_id: number;
   menu_name: string;
-  price: number;
+  /** pg returns numeric columns as strings, so this arrives as e.g. "2.00" —
+   *  coerce with Number() before any arithmetic or .toFixed(). */
+  price: number | string;
   branch_id: number;
   category_id: number;
   category_name: string;
   availability: number | null;
 }
 
-const API = "http://localhost:5000";
 const authHeader = (token: string | undefined) => ({ Authorization: `Bearer ${token}` });
 
 function AvailabilityBadge({ value }: { value: number | null }) {
@@ -113,43 +115,43 @@ export default function SteakAvailabilityPage() {
   if (!user || !branch) return null;
 
   return (
-    // h-screen + overflow-hidden on root, overflow-y-auto only on the body — header stays fixed
+    // h-full + overflow-hidden on root, overflow-y-auto only on the body — header stays fixed
     <div
-      className="h-screen flex flex-col bg-slate-50 text-slate-700 overflow-hidden"
+      className="h-full flex flex-col bg-slate-50 text-slate-700 overflow-hidden"
       style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}
     >
       {/* ── Sticky header ── */}
-      <header className="h-[52px] bg-white border-b border-slate-200 flex items-center px-5 gap-3 flex-shrink-0">
+      <header className="min-h-[52px] bg-white border-b border-slate-200 flex items-center px-3 md:px-5 gap-2 md:gap-3 flex-shrink-0">
         <button
           onClick={() => router.push("/dashboard")}
-          className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-slate-50 transition-colors"
+          aria-label="Back to dashboard" className="w-9 h-9 md:w-7 md:h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-slate-50 active:bg-slate-100 transition-colors flex-shrink-0 touch-manipulation"
         >
           <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
             <path d="m15 18-6-6 6-6" />
           </svg>
         </button>
 
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-orange-100 flex items-center justify-center">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-6 h-6 rounded-md bg-orange-100 flex items-center justify-center flex-shrink-0">
             <svg width="12" height="12" fill="none" stroke="#ea580c" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
               <path d="M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8zM6 1v3M10 1v3M14 1v3" />
             </svg>
           </div>
-          <h1 className="text-[13px] text-slate-700">Steak Availability</h1>
-          <span className="text-slate-300">·</span>
-          <span className="text-[11px] text-slate-400">{branch.branch_name}</span>
+          <h1 className="text-[13px] text-slate-700 truncate">Steak Availability</h1>
+          <span className="hidden lg:inline text-slate-300">·</span>
+          <span className="hidden lg:inline text-[11px] text-slate-400">{branch.branch_name}</span>
         </div>
 
         <button
           onClick={fetchSteaks}
           disabled={loading}
-          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-[11px] text-slate-500 hover:bg-slate-50 disabled:opacity-40 transition"
+          aria-label="Refresh" className="ml-auto flex items-center justify-center gap-1.5 h-9 md:h-auto px-3 md:py-1.5 rounded-lg border border-slate-200 text-[11px] text-slate-500 hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40 transition flex-shrink-0 touch-manipulation"
         >
           <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className={loading ? "animate-spin" : ""}>
             <path d="M23 4v6h-6M1 20v-6h6" />
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
           </svg>
-          Refresh
+          <span className="hidden sm:inline">Refresh</span>
         </button>
       </header>
 
@@ -158,7 +160,7 @@ export default function SteakAvailabilityPage() {
         className="flex-1 overflow-y-auto"
         style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}
       >
-        <div className="max-w-2xl mx-auto px-5 py-8">
+        <div className="max-w-2xl mx-auto px-3 md:px-5 py-5 md:py-8">
 
           {/* Info banner */}
           <div className="flex items-start gap-3 bg-orange-50 border border-orange-100 rounded-xl px-4 py-3 mb-6">
@@ -236,7 +238,7 @@ export default function SteakAvailabilityPage() {
                         steak.availability === 0 ? "border-red-200 shadow-sm shadow-red-50" : "border-slate-200"
                       }`}
                     >
-                      <div className="px-5 py-4">
+                      <div className="px-4 md:px-5 py-4">
                         <div className="flex items-start justify-between gap-3 mb-3">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
@@ -244,19 +246,19 @@ export default function SteakAvailabilityPage() {
                               <AvailabilityBadge value={steak.availability} />
                             </div>
                             <p className="text-[11px] text-slate-400 mt-0.5">
-                              PHP {steak.price.toFixed(2)} · ID #{steak.menu_id}
+                              PHP {Number(steak.price).toFixed(2)} · ID #{steak.menu_id}
                             </p>
                           </div>
                         </div>
 
                         {/* Input row */}
-                        <div className="flex items-center gap-2">
-                          <div className="flex gap-1">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <div className="flex gap-1.5 sm:gap-1">
                             {[0, 5, 10, 20].map((v) => (
                               <button
                                 key={v}
                                 onClick={() => quickSet(steak.menu_id, v)}
-                                className={`px-2 py-1 rounded-md text-[10px] border transition-all ${
+                                className={`flex-1 sm:flex-none px-2 py-2 sm:py-1 rounded-md text-[11px] sm:text-[10px] border transition-all touch-manipulation ${
                                   draft === String(v)
                                     ? "bg-indigo-600 border-indigo-600 text-white"
                                     : "border-slate-200 text-slate-400 hover:border-slate-300 hover:text-slate-600"
@@ -267,7 +269,7 @@ export default function SteakAvailabilityPage() {
                             ))}
                           </div>
 
-                          <div className="relative flex-1">
+                          <div className="relative flex-1 flex gap-2">
                             <input
                               type="number"
                               min="0"
@@ -283,7 +285,7 @@ export default function SteakAvailabilityPage() {
                           <button
                             onClick={() => handleSave(steak.menu_id)}
                             disabled={isSaving || !isDirty}
-                            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-[12px] transition-all flex-shrink-0 ${
+                            className={`flex items-center justify-center gap-1.5 px-3.5 py-2.5 sm:py-2 rounded-lg text-[12px] transition-all flex-shrink-0 touch-manipulation ${
                               isSaved
                                 ? "bg-emerald-600 text-white border border-emerald-600"
                                 : isDirty

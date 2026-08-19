@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { useSession } from "@/context/SessionContext";
 import { useRouter } from "next/navigation";
+import { API } from "@/lib/api";
 
 interface MenuItem {
   menu_id:       number;
@@ -25,8 +26,6 @@ interface MenuForm {
   price:        string;
   grab_price:  string;
 }
-
-const API = "http://localhost:5000";
 
 export default function MenuPage() {
   const { user, branch, hydrated } = useSession();
@@ -64,7 +63,7 @@ export default function MenuPage() {
   }, [hydrated, branch]);
 
   if (!hydrated) return (
-    <div className="flex items-center justify-center h-screen bg-slate-50 gap-3 text-slate-400" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <div className="flex items-center justify-center h-full bg-slate-50 gap-3 text-slate-400" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       <svg className="animate-spin" width="18" height="18" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>
       <span className="text-[13px]">Loading session...</span>
     </div>
@@ -137,40 +136,40 @@ export default function MenuPage() {
   );
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
 
       {/* ── TOPBAR ── */}
-      <header className="h-[52px] bg-white border-b border-slate-200 flex items-center px-6 gap-4 flex-shrink-0">
+      <header className="bg-white border-b border-slate-200 flex flex-wrap items-center px-3 md:px-6 gap-2 md:gap-4 py-2 md:py-0 md:h-[52px] md:flex-nowrap flex-shrink-0">
         <p className="text-[13px] text-slate-700">Menu Management</p>
 
-        <div className="relative flex-1 max-w-[260px] ml-4">
+        <div className="relative order-last w-full md:order-none md:flex-1 md:max-w-[260px] md:ml-4">
           <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
           </svg>
           <input type="text" placeholder="Search items..." value={search} onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 text-[13px] bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-400 text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition"/>
+            aria-label="Search menu items" className="w-full h-9 md:h-auto pl-8 pr-3 py-1.5 text-[13px] bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-400 text-slate-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition"/>
         </div>
 
         <div className="ml-auto flex items-center gap-2">
           {branch && (
-            <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-full">
+            <div className="hidden lg:flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-full">
               <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-slate-400"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>
               <span className="text-[11px] text-slate-600">{branch.branch_name}</span>
             </div>
           )}
-          <span className="text-[11px] text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">{menuItems.length} items</span>
+          <span className="hidden sm:inline text-[11px] text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">{menuItems.length} items</span>
           {user?.role === "admin" && (
             <button onClick={openAddForm}
-              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[12px] px-3.5 py-1.5 rounded-lg transition-colors">
+              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-[12px] h-9 md:h-auto px-3.5 md:py-1.5 rounded-lg transition-colors whitespace-nowrap touch-manipulation">
               <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-              Add Item
+              Add<span className="hidden sm:inline"> Item</span>
             </button>
           )}
         </div>
       </header>
 
       {/* ── CONTENT ── */}
-      <div className="flex-1 overflow-y-auto p-6" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+      <div className="flex-1 overflow-y-auto p-3 md:p-6" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
 
         {/* Stats row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
@@ -204,14 +203,15 @@ export default function MenuPage() {
               <p className="text-[13px] text-slate-400">No items found</p>
             </div>
           ) : (
+            <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-slate-100">
                   <th className="text-left text-[11px] text-slate-400 font-normal uppercase tracking-widest px-5 py-3">Name</th>
-                  <th className="text-left text-[11px] text-slate-400 font-normal uppercase tracking-widest px-5 py-3">Category</th>
+                  <th className="hidden md:table-cell text-left text-[11px] text-slate-400 font-normal uppercase tracking-widest px-5 py-3">Category</th>
                   <th className="text-right text-[11px] text-slate-400 font-normal uppercase tracking-widest px-5 py-3">Price</th>
                   {/* ── NEW: Grab Price column header ── */}
-                  <th className="text-right text-[11px] text-slate-400 font-normal uppercase tracking-widest px-5 py-3">Grab Price</th>
+                  <th className="hidden sm:table-cell text-right text-[11px] text-slate-400 font-normal uppercase tracking-widest px-5 py-3">Grab Price</th>
                   {user?.role === "admin" && (
                     <th className="px-5 py-3" />
                   )}
@@ -220,24 +220,30 @@ export default function MenuPage() {
               <tbody className="divide-y divide-slate-100">
                 {filtered.map((item) => (
                   <tr key={item.menu_id} className="hover:bg-slate-50 transition-colors group">
-                    <td className="px-5 py-3.5">
+                    <td className="px-3 md:px-5 py-3.5">
                       <div className="flex items-center gap-3">
                         <div className="w-7 h-7 rounded-lg bg-slate-100 group-hover:bg-indigo-50 flex items-center justify-center transition-colors flex-shrink-0">
                           <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" className="text-slate-400 group-hover:text-indigo-500 transition-colors">
                             <path d="M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8zM6 1v3M10 1v3M14 1v3"/>
                           </svg>
                         </div>
-                        <span className="text-[13px] text-slate-700">{item.menu_name}</span>
+                        <span className="text-[13px] text-slate-700 min-w-0">
+                          {item.menu_name}
+                          <span className="md:hidden block text-[10px] text-indigo-500 mt-0.5">
+                            {item.category_name}
+                            {item.grab_price > 0 && <span className="sm:hidden text-orange-500"> · grab PHP {Number(item.grab_price).toFixed(2)}</span>}
+                          </span>
+                        </span>
                       </div>
                     </td>
-                    <td className="px-5 py-3.5">
-                      <span className="text-[11px] text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full">{item.category_name}</span>
+                    <td className="hidden md:table-cell px-5 py-3.5">
+                      <span className="text-[11px] text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full whitespace-nowrap">{item.category_name}</span>
                     </td>
                     <td className="px-5 py-3.5 text-right">
                       <span className="text-[13px] text-slate-700">PHP {Number(item.price).toFixed(2)}</span>
                     </td>
                     {/* ── NEW: Grab Price column value ── */}
-                    <td className="px-5 py-3.5 text-right">
+                    <td className="hidden sm:table-cell px-5 py-3.5 text-right">
                       {item.grab_price > 0 ? (
                         <span className="text-[13px] text-orange-600">PHP {Number(item.grab_price).toFixed(2)}</span>
                       ) : (
@@ -248,7 +254,7 @@ export default function MenuPage() {
                       <td className="px-5 py-3.5 text-right">
                         <button
                           onClick={() => openEditForm(item)}
-                          className="text-slate-400 hover:text-indigo-500 transition-colors"
+                          className="w-9 h-9 md:w-auto md:h-auto inline-flex items-center justify-center text-slate-400 hover:text-indigo-500 active:text-indigo-600 transition-colors touch-manipulation"
                           title="Edit item"
                         >
                           <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
@@ -262,14 +268,15 @@ export default function MenuPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       </div>
 
       {/* ── ADD / EDIT ITEM MODAL ── */}
       {showForm && (
-        <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowForm(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl shadow-slate-900/15 w-[360px] p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowForm(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl shadow-slate-900/15 w-full max-w-[360px] max-h-[90dvh] overflow-y-auto p-5 md:p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
               <div>
                 <h3 className="text-[14px] text-slate-800">{editItem ? "Edit Menu Item" : "Add Menu Item"}</h3>

@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { useSession } from "@/context/SessionContext";
+import { API } from "@/lib/api";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface MenuItem {
@@ -113,7 +114,6 @@ function calcMultiDiscount(totalBill: number, headcount: number, rows: DiscountR
   };
 }
 
-const API = "http://localhost:5000";
 const authHeader = (token: string | undefined) => ({ Authorization: `Bearer ${token}` });
 const TABLE_KEY  = (id: string | number) => `table:${id}`;
 const saveTableNumber = (orderId: string | number, num: string) => {
@@ -145,8 +145,8 @@ function UpdatePasswordModal({ onSuccess, onCancel }: { onSuccess: () => void; o
     }
   };
   return (
-    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl shadow-2xl shadow-slate-900/15 w-[320px] p-6"
+    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-2xl shadow-2xl shadow-slate-900/15 w-full max-w-[320px] max-h-[90dvh] overflow-y-auto p-5 md:p-6"
         style={shaking ? { animation: "shake 0.4s ease-in-out" } : {}}>
         <h3 className="text-[14px] text-slate-800 mb-1">Enter Password</h3>
         <p className="text-[12px] text-slate-500 mb-4">A password is required to update this order.</p>
@@ -209,7 +209,7 @@ function SplitPaymentPanel({
                       key={m.label}
                       disabled={isBlocked}
                       onClick={() => updateEntry(idx, { method: m.label })}
-                      className={`flex items-center gap-2 px-2.5 py-2 rounded-lg border text-[11px] transition-all text-left ${
+                      className={`flex items-center gap-2 px-2.5 py-2.5 md:py-2 rounded-lg border text-[11px] transition-all text-left touch-manipulation ${
                         isChosen
                           ? "border-indigo-300 bg-indigo-50 text-indigo-700"
                           : isBlocked
@@ -308,6 +308,10 @@ function POSContent() {
   const [isSplitPayment, setIsSplitPayment]   = useState(false);
   const [splitEntries, setSplitEntries]       = useState<[SplitEntry, SplitEntry]>(EMPTY_SPLIT);
 
+  // Mobile only: the order panel is a bottom sheet below md. At md+ the panel is
+  // always visible as a side column and this flag is ignored entirely.
+  const [sheetOpen, setSheetOpen] = useState(false);
+
   const totalBill           = orders.reduce((s, o) => s + o.subtotal, 0);
   const hc                  = parseInt(headcount) || 0;
   const discCalc            = calcMultiDiscount(totalBill, hc, discountRows);
@@ -331,6 +335,22 @@ function POSContent() {
 
   const allServed  = orders.length > 0 && orders.every((o) => o.served);
   const itemCount  = orders.reduce((s, o) => s + o.quantity, 0);
+
+  // Entering checkout on mobile must reveal the sheet, otherwise tapping
+  // "Proceed to Payment" would appear to do nothing.
+  useEffect(() => {
+    if (step === "checkout") setSheetOpen(true);
+  }, [step]);
+
+  // Escape closes the mobile sheet.
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setSheetOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sheetOpen]);
 
   const handleToggleSplit = (enable: boolean) => {
     setIsSplitPayment(enable);
@@ -704,54 +724,61 @@ function POSContent() {
 
   if (!user || !branch) return null;
   if (loadingOrder) return (
-    <div className="flex items-center justify-center h-screen bg-slate-50 gap-3 text-slate-400" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <div className="flex items-center justify-center h-full bg-slate-50 gap-3 text-slate-400" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       <svg className="animate-spin" width="18" height="18" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>
       <span className="text-[13px]">Loading order...</span>
     </div>
   );
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden text-slate-700" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <div className="flex h-full bg-slate-50 overflow-hidden text-slate-700" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
 
       {/* ── LEFT: MENU ── */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <header className="h-[52px] bg-white border-b border-slate-200 flex items-center px-5 gap-3 flex-shrink-0">
-          <button onClick={() => router.push("/dashboard")} className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-slate-50 transition-colors flex-shrink-0">
+        <header className="min-h-[52px] bg-white border-b border-slate-200 flex items-center px-3 md:px-5 gap-2 md:gap-3 flex-shrink-0">
+          <button onClick={() => router.push("/dashboard")} aria-label="Back to orders" className="w-9 h-9 md:w-7 md:h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-slate-50 active:bg-slate-100 transition-colors flex-shrink-0">
             <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
           </button>
-          <div className="flex items-center gap-2 text-[11px]">
+          {/* Date/time is context, not action — first thing to go when space is tight */}
+          <div className="hidden lg:flex items-center gap-2 text-[11px]">
             <span className="text-slate-400">{dateStr}</span>
             <span className="text-slate-200">|</span>
             <span className="text-slate-500">{timeStr}</span>
             {isExisting && <><span className="text-slate-200">|</span><span className="text-indigo-500">Order #{orderId}</span></>}
           </div>
-          <div className="relative flex items-center gap-2 flex-1 max-w-[320px]">
+          {isExisting && (
+            <span className="lg:hidden text-[11px] text-indigo-500 flex-shrink-0">#{orderId}</span>
+          )}
+          <div className="relative flex items-center gap-2 flex-1 min-w-0 md:max-w-[320px]">
             <div className="relative flex-1">
               <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-              <input type="text" placeholder="Search items..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full pl-8 pr-3 py-1.5 text-[13px] bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-400 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition"/>
+              <input type="text" placeholder="Search items..." aria-label="Search menu items" value={search} onChange={(e) => setSearch(e.target.value)} className="w-full h-9 md:h-auto pl-8 pr-3 py-1.5 text-[13px] bg-slate-50 border border-slate-200 rounded-lg placeholder-slate-400 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition"/>
             </div>
             <div className="relative flex-shrink-0">
               <button onClick={() => setShowCategoryMenu((p) => !p)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[12px] font-medium transition-all ${
+                aria-haspopup="true" aria-expanded={showCategoryMenu}
+                aria-label="Filter by category"
+                className={`flex items-center gap-1.5 md:gap-2 h-9 md:h-auto px-2.5 md:px-3 md:py-1.5 rounded-lg border text-[12px] font-medium transition-all ${
                   selectedCategory !== null
                     ? "bg-indigo-600 border-indigo-600 text-white shadow-sm shadow-indigo-200"
                     : "bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600 hover:bg-indigo-50"}`}>
-                <svg width="13" height="13" fill={selectedCategory !== null ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-                <span>{selectedCategory !== null ? categories.find((c) => c.id === selectedCategory)?.category_name ?? "Category" : "Category"}</span>
-                <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24" className={`transition-transform ${showCategoryMenu ? "rotate-180" : ""}`}><path d="m6 9 6 6 6-6"/></svg>
+                <svg width="13" height="13" className="flex-shrink-0" fill={selectedCategory !== null ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                {/* Label is dead weight on a phone — the icon plus the amber dot carry the meaning */}
+                <span className="hidden sm:inline max-w-[110px] truncate">{selectedCategory !== null ? categories.find((c) => c.id === selectedCategory)?.category_name ?? "Category" : "Category"}</span>
+                <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24" className={`flex-shrink-0 transition-transform ${showCategoryMenu ? "rotate-180" : ""}`}><path d="m6 9 6 6 6-6"/></svg>
                 {selectedCategory !== null && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-400 border border-white" />}
               </button>
               {showCategoryMenu && (
                 <>
                   <div className="fixed inset-0 z-20" onClick={() => setShowCategoryMenu(false)} />
-                  <div className="absolute left-0 top-full mt-2 z-30 bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-900/10 py-1.5 min-w-[180px] overflow-y-auto max-h-[240px]"></div><div className="absolute left-0 top-full mt-2 z-30 bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-900/10 py-1.5 min-w-[180px] overflow-hidden">
+                  <div className="absolute right-0 md:left-0 md:right-auto top-full mt-2 z-30 bg-white border border-slate-200 rounded-xl shadow-xl shadow-slate-900/10 py-1.5 min-w-[180px] max-h-[50dvh] overflow-y-auto">
                     <p className="px-3.5 pb-1.5 pt-0.5 text-[10px] text-slate-400 uppercase tracking-wider border-b border-slate-100 mb-1">Filter by category</p>
                     {[{ id: null, category_name: "All Items" }, ...categories].map((cat) => (
                       <button key={cat.id ?? "all"} onClick={() => { setSelectedCategory(cat.id); setShowCategoryMenu(false); }}
-                        className={`w-full flex items-center justify-between gap-3 px-3.5 py-2.5 text-[12px] text-left transition-colors ${
-                          selectedCategory === cat.id ? "bg-indigo-50 text-indigo-600 font-medium" : "text-slate-600 hover:bg-slate-50"}`}>
+                        className={`w-full flex items-center justify-between gap-3 px-3.5 py-3 md:py-2.5 text-[13px] md:text-[12px] text-left transition-colors ${
+                          selectedCategory === cat.id ? "bg-indigo-50 text-indigo-600 font-medium" : "text-slate-600 hover:bg-slate-50 active:bg-slate-100"}`}>
                         <span>{cat.category_name}</span>
-                        {selectedCategory === cat.id && <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>}
+                        {selectedCategory === cat.id && <svg width="11" height="11" className="flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>}
                       </button>
                     ))}
                   </div>
@@ -759,11 +786,14 @@ function POSContent() {
               )}
             </div>
           </div>
-          <div className="ml-auto flex items-center gap-3">
+          <div className="ml-auto flex items-center gap-2 md:gap-3 flex-shrink-0">
             {isExisting && (
-              <button onClick={handleCancel} className="text-[11px] text-red-400 hover:text-red-600 border border-red-100 hover:border-red-200 bg-red-50 px-2.5 py-1 rounded-lg transition-colors">Cancel Order</button>
+              <button onClick={handleCancel} className="text-[11px] text-red-400 hover:text-red-600 border border-red-100 hover:border-red-200 bg-red-50 h-9 md:h-auto px-2.5 md:py-1 rounded-lg transition-colors whitespace-nowrap">
+                Cancel<span className="hidden sm:inline"> Order</span>
+              </button>
             )}
-            <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-full">
+            {/* Branch + cashier already live in the mobile top bar */}
+            <div className="hidden lg:flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-full">
               <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-slate-400"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>
               <span className="text-[11px] text-slate-600">{branch.branch_name}</span>
               <span className="text-slate-300">·</span>
@@ -773,7 +803,8 @@ function POSContent() {
         </header>
 
         {/* Menu grid */}
-        <div className="flex-1 overflow-y-auto p-5" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+        {/* pb-24 on mobile keeps the last row clear of the sticky cart bar */}
+        <div className="flex-1 overflow-y-auto p-3 pb-24 md:p-5 md:pb-5" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
           {filteredMenu.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-300">
               <svg width="34" height="34" fill="none" stroke="currentColor" strokeWidth="1.25" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -787,11 +818,11 @@ function POSContent() {
                 return (
                   <button key={item.menu_id} onClick={() => selectItem(item)} disabled={soldOut}
                     title={soldOut ? "Sold out" : undefined}
-                    className={`group border rounded-xl p-4 text-left transition-all duration-150 ${
+                    className={`group border rounded-xl p-3 md:p-4 text-left transition-all duration-150 touch-manipulation ${
                       soldOut
                         ? "bg-slate-50 border-slate-200 opacity-50 cursor-not-allowed"
-                        : "bg-white border-slate-200 hover:border-indigo-300 hover:shadow-md hover:shadow-indigo-100/50 active:scale-[0.97]"}`}>
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-3 transition-colors ${soldOut ? "bg-slate-100" : "bg-slate-100 group-hover:bg-indigo-50"}`}>
+                        : "bg-white border-slate-200 hover:border-indigo-300 hover:shadow-md hover:shadow-indigo-100/50 active:scale-[0.97] active:border-indigo-300"}`}>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center mb-2 md:mb-3 transition-colors ${soldOut ? "bg-slate-100" : "bg-slate-100 group-hover:bg-indigo-50"}`}>
                       <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"
                         className={`transition-colors ${soldOut ? "text-slate-300" : "text-slate-400 group-hover:text-indigo-500"}`}>
                         <path d="M18 8h1a4 4 0 0 1 0 8h-1M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8zM6 1v3M10 1v3M14 1v3"/>
@@ -827,8 +858,75 @@ function POSContent() {
         </div>
       </div>
 
-      {/* ── RIGHT: ORDER PANEL ── */}
-      <div className="w-[340px] bg-white border-l border-slate-200 flex flex-col flex-shrink-0">
+      {/* ── MOBILE: sticky cart bar (the only entry point to the sheet) ── */}
+      <div className="md:hidden fixed inset-x-0 bottom-0 z-30 bg-indigo-600 pb-[env(safe-area-inset-bottom)]">
+        <button
+          onClick={() => setSheetOpen(true)}
+          aria-label={`Open order panel, ${itemCount} item${itemCount !== 1 ? "s" : ""}, total PHP ${totalBill.toFixed(2)}`}
+          className="w-full h-16 px-4 flex items-center gap-3 text-left text-white active:bg-indigo-700 transition-colors touch-manipulation"
+        >
+          <div className="relative flex-shrink-0">
+            <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+              <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+              <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+            </svg>
+            {itemCount > 0 && (
+              <span className="absolute -top-1.5 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-400 text-slate-900 text-[10px] font-semibold flex items-center justify-center">
+                {itemCount}
+              </span>
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] leading-tight truncate">
+              {itemCount > 0 ? `${itemCount} item${itemCount !== 1 ? "s" : ""}` : "No items yet"}
+            </p>
+            <p className="text-[11px] text-indigo-200 leading-tight truncate mt-0.5">
+              {isExisting ? `Order #${orderId}` : orderType}
+              {orderType === "Dine In" && tableNumber ? ` · Table ${tableNumber}` : ""}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="text-[15px] font-medium">PHP {totalBill.toFixed(2)}</span>
+            <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg>
+          </div>
+        </button>
+      </div>
+
+      {/* Mobile sheet backdrop */}
+      <div
+        onClick={() => setSheetOpen(false)}
+        aria-hidden="true"
+        className={`md:hidden fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-[2px] transition-opacity duration-200 ${
+          sheetOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+      />
+
+      {/* ── ORDER PANEL — bottom sheet below md, static side column at md+ ──
+          One instance, repositioned by CSS: duplicating it would fork focus,
+          scroll position and input state between two live copies. */}
+      <div
+        role="dialog"
+        aria-modal={sheetOpen ? true : undefined}
+        aria-label="Order panel"
+        className={`pos-sheet ${sheetOpen ? "pos-sheet-open" : ""} bg-white flex flex-col
+          fixed inset-x-0 bottom-0 z-50 h-[88dvh] rounded-t-2xl shadow-2xl shadow-slate-900/25
+          md:static md:z-auto md:h-auto
+          md:w-[340px] md:rounded-none md:shadow-none md:border-l md:border-slate-200 md:flex-shrink-0`}
+      >
+        {/* Sheet handle — mobile affordance for dismissing */}
+        <div className="md:hidden flex-shrink-0 border-b border-slate-100">
+          <button
+            onClick={() => setSheetOpen(false)}
+            aria-label="Close order panel"
+            className="w-full pt-2.5 pb-2 flex flex-col items-center gap-1.5 active:bg-slate-50 transition-colors touch-manipulation"
+          >
+            <span className="w-10 h-1 rounded-full bg-slate-300" />
+            <span className="text-[10px] text-slate-400 uppercase tracking-widest">Tap to close</span>
+          </button>
+        </div>
+
         {step !== "checkout" ? (
           <>
             <div className="px-5 pt-4 pb-3 border-b border-slate-100 flex-shrink-0">
@@ -852,12 +950,12 @@ function POSContent() {
                           if (t !== "Dine In") setTableNumber("");
                           if (orders.length > 0) setOrders([]);
                         }}
-                        className={`flex-1 py-1.5 rounded-lg text-[11px] border transition-all ${
+                        className={`flex-1 py-2.5 md:py-1.5 rounded-lg text-[12px] md:text-[11px] border transition-all touch-manipulation ${
                           orderType === t
                             ? t === "Grab"
                               ? "bg-orange-500 border-orange-500 text-white"
                               : "bg-indigo-600 border-indigo-600 text-white"
-                            : "bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+                            : "bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300 active:bg-slate-100"}`}>
                         {t}
                       </button>
                     ))}
@@ -919,19 +1017,19 @@ function POSContent() {
                     <div key={order.localId} className="px-5 py-3 space-y-2">
                       <div className="flex items-center gap-2">
                         {isExisting && (
-                          <input type="checkbox" checked={order.served} onChange={() => toggleServed(order.localId)} className="accent-emerald-500 w-3.5 h-3.5 flex-shrink-0"/>
+                          <input type="checkbox" checked={order.served} onChange={() => toggleServed(order.localId)} aria-label={`Mark ${order.menu_name} as served`} className="accent-emerald-500 w-5 h-5 md:w-3.5 md:h-3.5 flex-shrink-0"/>
                         )}
                         <div className="flex-1 min-w-0">
                           <p className={`text-[12px] truncate ${order.served ? "text-emerald-600" : "text-slate-700"}`}>{order.menu_name}</p>
                           <p className="text-[11px] text-slate-400 mt-0.5">PHP {order.price.toFixed(2)}</p>
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
-                          <button onClick={() => adjustQty(order.localId, -1)} className="w-6 h-6 rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 flex items-center justify-center text-[13px] transition-colors">−</button>
+                          <button onClick={() => adjustQty(order.localId, -1)} aria-label={`Decrease quantity of ${order.menu_name}`} className="w-8 h-8 md:w-6 md:h-6 rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 active:bg-slate-200 flex items-center justify-center text-[15px] md:text-[13px] transition-colors touch-manipulation">−</button>
                           <span className="text-[12px] text-slate-700 w-5 text-center">{order.quantity}</span>
-                          <button onClick={() => adjustQty(order.localId, 1)} className="w-6 h-6 rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 flex items-center justify-center text-[13px] transition-colors">+</button>
+                          <button onClick={() => adjustQty(order.localId, 1)} aria-label={`Increase quantity of ${order.menu_name}`} className="w-8 h-8 md:w-6 md:h-6 rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 active:bg-slate-200 flex items-center justify-center text-[15px] md:text-[13px] transition-colors touch-manipulation">+</button>
                         </div>
                         <p className="text-[12px] text-slate-700 w-14 text-right flex-shrink-0">PHP {order.subtotal.toFixed(2)}</p>
-                        <button onClick={() => removeItem(order.localId)} className="text-slate-300 hover:text-red-400 transition-colors flex-shrink-0">
+                        <button onClick={() => removeItem(order.localId)} aria-label={`Remove ${order.menu_name}`} className="w-8 h-8 md:w-auto md:h-auto flex items-center justify-center text-slate-300 hover:text-red-400 active:text-red-500 transition-colors flex-shrink-0 touch-manipulation">
                           <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
                         </button>
                       </div>
@@ -941,7 +1039,7 @@ function POSContent() {
               )}
             </div>
 
-            <div className="border-t border-slate-100 px-5 py-4 flex-shrink-0 space-y-3">
+            <div className="border-t border-slate-100 px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-4 flex-shrink-0 space-y-3">
               <div className="flex justify-between items-baseline">
                 <span className="text-[13px] text-slate-600">Total</span>
                 <span className="text-[17px] text-slate-900 font-medium">PHP {totalBill.toFixed(2)}</span>
@@ -955,11 +1053,11 @@ function POSContent() {
               {isExisting ? (
                 <div className="flex gap-2">
                   <button onClick={handleUpdateOrderClick} disabled={saving}
-                    className="flex-1 py-2.5 rounded-xl border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50 disabled:opacity-30 transition">
+                    className="flex-1 py-3 md:py-2.5 rounded-xl border border-slate-200 text-[12px] text-slate-600 hover:bg-slate-50 active:bg-slate-100 disabled:opacity-30 transition touch-manipulation">
                     {saving ? "Saving..." : "Update Order"}
                   </button>
                   <button onClick={() => setStep("checkout")} disabled={orders.length === 0 || !allServed}
-                    className="flex-[2] bg-indigo-600 text-white text-[13px] py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed transition tracking-wide">
+                    className="flex-[2] bg-indigo-600 text-white text-[13px] py-3 md:py-2.5 rounded-xl hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-30 disabled:cursor-not-allowed transition tracking-wide touch-manipulation">
                     Proceed to Payment
                   </button>
                 </div>
@@ -976,7 +1074,7 @@ function POSContent() {
                     </div>
                   </div>
                   <button onClick={handlePlaceOrder} disabled={!canPlaceOrder}
-                    className="w-full bg-indigo-600 text-white text-[13px] py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed transition tracking-wide flex items-center justify-center gap-2">
+                    className="w-full bg-indigo-600 text-white text-[13px] py-3 md:py-2.5 rounded-xl hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-30 disabled:cursor-not-allowed transition tracking-wide flex items-center justify-center gap-2 touch-manipulation">
                     {saving
                       ? (<><svg className="animate-spin" width="13" height="13" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>Placing...</>)
                       : "Place Order"}
@@ -989,7 +1087,7 @@ function POSContent() {
           /* ── CHECKOUT ── */
           <>
             <div className="px-5 py-3.5 border-b border-slate-100 flex items-center gap-3 flex-shrink-0">
-              <button onClick={() => setStep("select")} className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-slate-50 transition-colors">
+              <button onClick={() => setStep("select")} aria-label="Back to order" className="w-9 h-9 md:w-7 md:h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-slate-50 active:bg-slate-100 transition-colors flex-shrink-0 touch-manipulation">
                 <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
               </button>
               <div>
@@ -1204,9 +1302,9 @@ function POSContent() {
             </div>
 
             {/* Confirm button */}
-            <div className="border-t border-slate-100 px-5 py-4 space-y-2 flex-shrink-0">
+            <div className="border-t border-slate-100 px-5 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))] md:pb-4 space-y-2 flex-shrink-0">
               <button onClick={handleConfirmPayment} disabled={!canConfirm || saving}
-                className="w-full bg-indigo-600 text-white text-[13px] py-2.5 rounded-xl hover:bg-indigo-700 disabled:opacity-30 disabled:cursor-not-allowed transition tracking-wide flex items-center justify-center gap-2">
+                className="w-full bg-indigo-600 text-white text-[13px] py-3 md:py-2.5 rounded-xl hover:bg-indigo-700 active:bg-indigo-800 disabled:opacity-30 disabled:cursor-not-allowed transition tracking-wide flex items-center justify-center gap-2 touch-manipulation">
                 {saving
                   ? (<><svg className="animate-spin" width="13" height="13" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>Processing...</>)
                   : `Confirm Payment · PHP ${discCalc.amountDue}`
@@ -1220,8 +1318,8 @@ function POSContent() {
 
       {/* ── QTY MODAL ── */}
       {step === "quantity" && currentItem && (
-        <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => { setCurrentItem(null); setStep("select"); }}>
-          <div className="bg-white rounded-2xl shadow-2xl shadow-slate-900/15 w-[300px] p-6" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 bg-slate-900/30 backdrop-blur-sm flex items-center justify-center z-[60] p-4" onClick={() => { setCurrentItem(null); setStep("select"); }}>
+          <div className="bg-white rounded-2xl shadow-2xl shadow-slate-900/15 w-full max-w-[320px] max-h-[90dvh] overflow-y-auto p-5 md:p-6" onClick={(e) => e.stopPropagation()}>
             <p className="text-[10px] text-slate-400 uppercase tracking-widest mb-1">{currentItem.category_name}</p>
             <h3 className="text-[15px] text-slate-800 mb-1">{currentItem.menu_name}</h3>
             <p className="text-[13px] text-indigo-600 mb-5">
@@ -1247,8 +1345,8 @@ function POSContent() {
 
       {/* ── OR MODAL: Yes / No ── */}
       {showOrModal === "yesno" && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-2xl shadow-slate-900/15 w-[320px] p-6">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl shadow-slate-900/15 w-full max-w-[320px] max-h-[90dvh] overflow-y-auto p-5 md:p-6">
             <h3 className="text-[14px] text-slate-800 mb-2">Official Receipt</h3>
             <p className="text-[12px] text-slate-500 mb-5">Does the customer want an Official Receipt (OR)?</p>
             <div className="flex gap-2">
@@ -1261,8 +1359,8 @@ function POSContent() {
 
       {/* ── OR MODAL: Slip number ── */}
       {(showOrModal === "slip" || showOrModal === "credit") && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-2xl shadow-slate-900/15 w-[320px] p-6">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl shadow-slate-900/15 w-full max-w-[320px] max-h-[90dvh] overflow-y-auto p-5 md:p-6">
             <h3 className="text-[14px] text-slate-800 mb-2">Order Slip Number</h3>
             <p className="text-[12px] text-slate-500 mb-4">Enter the order slip number for the Official Receipt.</p>
             <input type="number" min="1" placeholder="e.g. 123" value={orSlipNumber} onChange={(e) => setOrSlipNumber(e.target.value)}
@@ -1293,7 +1391,7 @@ function POSContent() {
 export default function POSPage() {
   return (
     <Suspense fallback={
-      <div className="flex items-center justify-center h-screen bg-slate-50 gap-3 text-slate-400" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+      <div className="flex items-center justify-center h-full bg-slate-50 gap-3 text-slate-400" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
         <svg className="animate-spin" width="18" height="18" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>
         <span className="text-[13px]">Loading...</span>
       </div>

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getUserRole } from "../../../lib/auth";
+import { API } from "@/lib/api";
 
 interface User {
   id: number;
@@ -26,7 +27,6 @@ export default function UsersPage() {
     password: "",
     role: "cashier",
   });
-const API = "http://localhost:5000";
   // Admin guard
   useEffect(() => {
     if (getUserRole() !== "admin") {
@@ -123,19 +123,21 @@ const API = "http://localhost:5000";
   };
 
   return (
+    // Own scroll container: <main> is overflow-hidden, so without this the page
+    // simply clips once the user list is taller than the viewport.
     <div
-      className="flex-1 bg-slate-950 min-h-screen p-6"
+      className="h-full overflow-y-auto bg-slate-950 p-4 md:p-6"
       style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-white text-lg font-semibold">User Management</h1>
           <p className="text-slate-500 text-xs mt-0.5">Manage staff accounts</p>
         </div>
         <button
           onClick={() => { setShowForm((v) => !v); setError(""); setSuccess(""); }}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4 py-2.5 rounded-lg transition-all"
+          className="flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white text-xs px-4 py-3 sm:py-2.5 rounded-lg transition-all touch-manipulation"
         >
           <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
             <path d="M12 5v14M5 12h14" strokeLinecap="round"/>
@@ -223,7 +225,7 @@ const API = "http://localhost:5000";
               <button
                 type="submit"
                 disabled={submitting}
-                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs px-6 py-2.5 rounded-lg transition-all"
+                className="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-50 text-white text-xs px-6 py-3 sm:py-2.5 rounded-lg transition-all touch-manipulation"
               >
                 {submitting ? "Creating..." : "Create User"}
               </button>
@@ -243,27 +245,31 @@ const API = "http://localhost:5000";
         ) : users.length === 0 ? (
           <div className="px-5 py-10 text-center text-slate-600 text-xs">No users found.</div>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead>
               <tr className="border-b border-slate-800">
                 <th className="text-left text-slate-500 uppercase tracking-wider px-5 py-3 font-medium">Name</th>
-                <th className="text-left text-slate-500 uppercase tracking-wider px-5 py-3 font-medium">Email</th>
+                <th className="hidden sm:table-cell text-left text-slate-500 uppercase tracking-wider px-3 md:px-5 py-3 font-medium">Email</th>
                 <th className="text-left text-slate-500 uppercase tracking-wider px-5 py-3 font-medium">Role</th>
-                <th className="text-left text-slate-500 uppercase tracking-wider px-5 py-3 font-medium">Joined</th>
+                <th className="hidden md:table-cell text-left text-slate-500 uppercase tracking-wider px-3 md:px-5 py-3 font-medium">Joined</th>
                 <th className="px-5 py-3" />
               </tr>
             </thead>
             <tbody>
               {users.map((user) => (
                 <tr key={user.id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
-                  <td className="px-5 py-3 text-white font-medium">{user.full_name}</td>
-                  <td className="px-5 py-3 text-slate-400">{user.email}</td>
+                  <td className="px-3 md:px-5 py-3 text-white font-medium">
+                    {user.full_name}
+                    <span className="sm:hidden block text-slate-500 font-normal text-[10px] mt-0.5 break-all">{user.email}</span>
+                  </td>
+                  <td className="hidden sm:table-cell px-3 md:px-5 py-3 text-slate-400 break-all">{user.email}</td>
                   <td className="px-5 py-3">
                     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${roleBadge(user.role)}`}>
                       {user.role}
                     </span>
                   </td>
-                  <td className="px-5 py-3 text-slate-500">
+                  <td className="hidden md:table-cell px-3 md:px-5 py-3 text-slate-500 whitespace-nowrap">
                     {new Date(user.created_at).toLocaleDateString("en-US", {
                       month: "short", day: "numeric", year: "numeric",
                     })}
@@ -271,7 +277,7 @@ const API = "http://localhost:5000";
                   <td className="px-5 py-3 text-right">
                     <button
                       onClick={() => handleDelete(user.id, user.full_name)}
-                      className="text-slate-600 hover:text-red-400 transition-colors"
+                      className="w-9 h-9 md:w-auto md:h-auto inline-flex items-center justify-center text-slate-600 hover:text-red-400 active:text-red-500 transition-colors touch-manipulation"
                       title="Delete user"
                     >
                       <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
@@ -286,6 +292,7 @@ const API = "http://localhost:5000";
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

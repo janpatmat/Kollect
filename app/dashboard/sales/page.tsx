@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import * as XLSX from "xlsx";
 import { useSession } from "@/context/SessionContext";
+import { API } from "@/lib/api";
 
 interface SaleRecord {
   order_id:             number;
@@ -25,8 +26,6 @@ interface ActivityLog {
   date:     string;
   order_id: number;
 }
-
-const API = "http://localhost:5000";
 
 const PAYMENT_METHODS  = ["All", "Cash", "Credit / Debit", "E-Wallet", "Bank Transfer"];
 const ORDER_STATUSES   = ["All", "Dine In", "Take Out", "Grab"];
@@ -177,8 +176,8 @@ function PasswordModal({ onConfirm, onCancel, error }: PasswordModalProps) {
   useEffect(() => { inputRef.current?.focus(); }, []);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(15,23,42,0.45)", backdropFilter: "blur(2px)" }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-[340px] overflow-hidden" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(15,23,42,0.45)", backdropFilter: "blur(2px)" }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[340px] max-h-[90dvh] overflow-y-auto" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
         {/* Header */}
         <div className="px-6 pt-6 pb-4 border-b border-slate-100">
           <div className="flex items-center gap-3 mb-1">
@@ -286,8 +285,8 @@ function EditOrderModal({ sale, onSave, onCancel, isSaving, saveError }: EditOrd
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(15,23,42,0.45)", backdropFilter: "blur(2px)" }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-[400px] max-h-[88vh] flex flex-col overflow-hidden" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(15,23,42,0.45)", backdropFilter: "blur(2px)" }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[400px] max-h-[88dvh] flex flex-col overflow-hidden" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
         {/* Header */}
         <div className="px-6 pt-6 pb-4 border-b border-slate-100 flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -408,8 +407,8 @@ interface ActivityLogModalProps {
 
 function ActivityLogModal({ orderId, logs, loading, onClose }: ActivityLogModalProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(15,23,42,0.45)", backdropFilter: "blur(2px)" }}>
-      <div className="bg-white rounded-2xl shadow-2xl w-[480px] max-h-[70vh] flex flex-col overflow-hidden" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(15,23,42,0.45)", backdropFilter: "blur(2px)" }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[480px] max-h-[80dvh] flex flex-col overflow-hidden" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
         {/* Header */}
         <div className="px-6 pt-6 pb-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -629,7 +628,7 @@ export default function SalesPage() {
 
   // ── Early return AFTER all hooks ──────────────────────────────────────────
   if (!hydrated) return (
-    <div className="flex items-center justify-center h-screen bg-slate-50 gap-3 text-slate-400" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <div className="flex items-center justify-center h-full bg-slate-50 gap-3 text-slate-400" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       <svg className="animate-spin" width="18" height="18" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>
       <span className="text-[13px]">Loading session...</span>
     </div>
@@ -694,7 +693,7 @@ export default function SalesPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
 
       {/* ── Modals ── */}
       {modalState?.phase === "password" && (
@@ -723,48 +722,48 @@ export default function SalesPage() {
       )}
 
       {/* Topbar */}
-      <header className="h-[52px] bg-white border-b border-slate-200 flex items-center px-6 gap-4 flex-shrink-0">
-        <button onClick={() => router.push("/dashboard")} className="w-7 h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-slate-50 transition-colors">
+      <header className="min-h-[52px] bg-white border-b border-slate-200 flex items-center px-3 md:px-6 gap-2 md:gap-4 flex-shrink-0">
+        <button onClick={() => router.push("/dashboard")} aria-label="Back to dashboard" className="w-9 h-9 md:w-7 md:h-7 rounded-lg border border-slate-200 flex items-center justify-center text-slate-400 hover:bg-slate-50 active:bg-slate-100 transition-colors flex-shrink-0 touch-manipulation">
           <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>
         </button>
-        <p className="text-[13px] text-slate-700">Daily Sales</p>
-        <p className="text-[11px] text-slate-400 ml-2">{dateStr}</p>
+        <p className="text-[13px] text-slate-700 flex-shrink-0">Daily Sales</p>
+        <p className="hidden sm:block text-[11px] text-slate-400 ml-2">{dateStr}</p>
         <div className="ml-auto flex items-center gap-2">
           {branch && (
-            <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-full">
+            <div className="hidden lg:flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-full">
               <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-slate-400"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>
               <span className="text-[11px] text-slate-600">{branch.branch_name}</span>
             </div>
           )}
-          <span className="text-[11px] text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">
+          <span className="hidden md:inline text-[11px] text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">
             {filtered.length} transaction{filtered.length !== 1 ? "s" : ""}
           </span>
           <button onClick={handleExportExcel} disabled={loading || filtered.length === 0}
-            className="flex items-center gap-1.5 text-[11px] text-emerald-700 border border-emerald-200 hover:border-emerald-300 hover:bg-emerald-50 bg-white px-2.5 py-1 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+            aria-label="Export to Excel" className="flex items-center justify-center gap-1.5 text-[11px] text-emerald-700 border border-emerald-200 hover:border-emerald-300 hover:bg-emerald-50 active:bg-emerald-100 bg-white h-9 md:h-auto px-2.5 md:py-1 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 touch-manipulation">
             <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-            Export Excel
+            <span className="hidden lg:inline">Export Excel</span>
           </button>
           <button onClick={handlePrint} disabled={loading || filtered.length === 0}
-            className="flex items-center gap-1.5 text-[11px] text-slate-600 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 bg-white px-2.5 py-1 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+            aria-label="Print or save as PDF" className="flex items-center justify-center gap-1.5 text-[11px] text-slate-600 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 active:bg-slate-100 bg-white h-9 md:h-auto px-2.5 md:py-1 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 touch-manipulation">
             <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-            Print / Save PDF
+            <span className="hidden lg:inline">Print / Save PDF</span>
           </button>
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-5" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+      <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 md:space-y-5" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
 
         {/* Summary cards */}
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 md:gap-3">
           {[
             { label: "Gross Sales",     value: `PHP ${totalRevenue.toFixed(2)}`,    color: "text-slate-800"   },
             { label: "Total Discounts", value: `− PHP ${totalDiscount.toFixed(2)}`, color: "text-red-500"     },
             { label: "Net Sales",       value: `PHP ${netRevenue.toFixed(2)}`,      color: "text-indigo-600"  },
             { label: "Total Pax Today", value: totalPaxDay.toString(),              color: "text-emerald-600", sub: "across all paid orders" },
           ].map((c) => (
-            <div key={c.label} className="bg-white border border-slate-200 rounded-xl px-5 py-4">
+            <div key={c.label} className="bg-white border border-slate-200 rounded-xl px-3 py-3 md:px-5 md:py-4">
               <p className="text-[11px] text-slate-400 mb-1">{c.label}</p>
-              <p className={`text-[20px] font-medium ${c.color}`}>{c.value}</p>
+              <p className={`text-[17px] md:text-[20px] font-medium break-words ${c.color}`}>{c.value}</p>
               {"sub" in c && c.sub && <p className="text-[10px] text-slate-300 mt-1">{c.sub}</p>}
             </div>
           ))}
@@ -777,7 +776,7 @@ export default function SalesPage() {
             <div className="flex gap-1.5 flex-wrap">
               {PAYMENT_METHODS.map((m) => (
                 <button key={m} onClick={() => setFilterPayment(m)}
-                  className={`text-[12px] px-3 py-1.5 rounded-lg border transition-all ${filterPayment === m ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+                  className={`text-[12px] px-3 py-2 md:py-1.5 rounded-lg border transition-all touch-manipulation ${filterPayment === m ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"}`}>
                   {m}
                 </button>
               ))}
@@ -788,7 +787,7 @@ export default function SalesPage() {
             <div className="flex gap-1.5">
               {ORDER_STATUSES.map((s) => (
                 <button key={s} onClick={() => setFilterStatus(s)}
-                  className={`text-[12px] px-3 py-1.5 rounded-lg border transition-all ${filterStatus === s ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+                  className={`text-[12px] px-3 py-2 md:py-1.5 rounded-lg border transition-all touch-manipulation ${filterStatus === s ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"}`}>
                   {s}
                 </button>
               ))}
@@ -799,7 +798,7 @@ export default function SalesPage() {
             <div className="flex gap-1.5">
               {ORDER_CATEGORIES.map((c) => (
                 <button key={c} onClick={() => setFilterCategory(c)}
-                  className={`text-[12px] px-3 py-1.5 rounded-lg border capitalize transition-all ${filterCategory === c ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+                  className={`text-[12px] px-3 py-2 md:py-1.5 rounded-lg border capitalize transition-all touch-manipulation ${filterCategory === c ? "bg-indigo-600 border-indigo-600 text-white" : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"}`}>
                   {c}
                 </button>
               ))}
@@ -824,7 +823,8 @@ export default function SalesPage() {
               <p className="text-[13px] text-slate-400">No transactions match your filters</p>
             </div>
           ) : (
-            <table className="w-full">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[980px]">
               <thead>
                 <tr className="border-b border-slate-100">
                   {["Order", "Time", "Cashier", "Status", "Category", "Pax", "Payment", "Bill", "Discount", "Net", "Actions"].map((h) => (
@@ -943,6 +943,7 @@ export default function SalesPage() {
                 })}
               </tbody>
             </table>
+              </div>
           )}
         </div>
       </div>

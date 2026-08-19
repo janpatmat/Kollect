@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import { useSession } from "@/context/SessionContext";
+import { API } from "@/lib/api";
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -19,7 +20,7 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const res = await axios.post("http://localhost:5000/auth/login", {
+      const res = await axios.post(`${API}/auth/login`, {
         email,
         password,
       });
@@ -44,7 +45,7 @@ export default function Login() {
 
   return (
     <main
-      className="min-h-screen bg-slate-950 flex items-center justify-center px-6"
+      className="min-h-[100dvh] bg-slate-950 flex items-center justify-center px-4 md:px-6 py-8"
       style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}
     >
       <div className="w-full max-w-sm">
@@ -55,12 +56,12 @@ export default function Login() {
             
             
           </div>
-          <h1 className="text-6xl font-semibold text-white leading-none">Kollect</h1>
-          <p className="text-lg text-slate-600 mt-1 uppercase tracking-widest">POS System</p>
+          <h1 className="text-5xl sm:text-6xl font-semibold text-white leading-none">Kollect</h1>
+          <p className="text-base sm:text-lg text-slate-600 mt-1 uppercase tracking-widest">POS System</p>
         </div>
 
         {/* Card */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-7">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-7">
 
           {/* Heading */}
           <div className="mb-6">
@@ -73,9 +74,16 @@ export default function Login() {
 
             {/* Email */}
             <div className="space-y-1.5">
-              <label className="text-[11px] text-slate-500 uppercase tracking-wider">Email address</label>
+              <label htmlFor="login-email" className="block text-[11px] text-slate-500 uppercase tracking-wider">Email address</label>
               <input
+                id="login-email"
+                name="email"
                 type="email"
+                autoComplete="email"
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -86,9 +94,12 @@ export default function Login() {
 
             {/* Password */}
             <div className="space-y-1.5">
-              <label className="text-[11px] text-slate-500 uppercase tracking-wider">Password</label>
+              <label htmlFor="login-password" className="block text-[11px] text-slate-500 uppercase tracking-wider">Password</label>
               <input
+                id="login-password"
+                name="password"
                 type="password"
+                autoComplete="current-password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -111,7 +122,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full mt-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[13px] font-medium py-2.5 rounded-lg transition-colors"
+              className="w-full mt-1 flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[13px] font-medium py-3.5 sm:py-2.5 rounded-lg transition-colors touch-manipulation"
             >
               {loading ? (
                 <>

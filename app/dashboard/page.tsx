@@ -5,13 +5,12 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import OrderCard from "../components/ordercard";
 import { useSession } from "@/context/SessionContext";
+import { API } from "@/lib/api";
 
 // ── served: boolean added to match OrderCard's expected interface ─────────────
 interface OrderItem { order_item_id: number; menu_name: string; quantity: number; price_at_time: number; served: boolean; }
 interface Order { order_id: number; order_payment_method: string; order_datetime: string; status: string; total_bill: number; items: OrderItem[]; }
 interface DailyStats { dine_in: string; take_out: string; cancelled: string; }
-
-const API = 'http://localhost:5000';
 
 export default function Dashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -45,7 +44,7 @@ export default function Dashboard() {
   }, [hydrated, branch]);
 
   if (!hydrated) return (
-    <div className="flex items-center justify-center h-screen bg-slate-50 gap-3 text-slate-400" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <div className="flex items-center justify-center h-full bg-slate-50 gap-3 text-slate-400" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       <svg className="animate-spin" width="18" height="18" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4H4z"/></svg>
       <span className="text-[13px]">Loading session...</span>
     </div>
@@ -81,46 +80,48 @@ export default function Dashboard() {
   ];
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <div className="flex flex-col h-full bg-slate-50 overflow-hidden" style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}>
 
       {/* Topbar */}
-      <header className="h-[52px] bg-white border-b border-slate-200 flex items-center px-6 gap-4 flex-shrink-0">
-        <p className="text-[13px] text-slate-700">Dashboard</p>
-        <p className="text-[11px] text-slate-400 ml-2">{dateStr}</p>
+      <header className="min-h-[52px] bg-white border-b border-slate-200 flex items-center px-3 md:px-6 gap-2 md:gap-4 flex-shrink-0">
+        <p className="text-[13px] text-slate-700 flex-shrink-0">Dashboard</p>
+        <p className="hidden sm:block text-[11px] text-slate-400 ml-2">{dateStr}</p>
+        {/* Branch + cashier already sit in the mobile top bar */}
         {branch && (
-          <div className="flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-full">
+          <div className="hidden lg:flex items-center gap-1.5 bg-slate-100 px-2.5 py-1 rounded-full">
             <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" className="text-slate-400"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>
             <span className="text-[11px] text-slate-600">{branch.branch_name}</span>
             {user && <><span className="text-slate-300">·</span><span className="text-[11px] text-slate-400">{user.full_name}</span></>}
           </div>
         )}
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex items-center gap-2 flex-shrink-0">
           <button onClick={() => router.push("/dashboard/sales")}
-            className="text-[12px] text-slate-500 border border-slate-200 px-3 py-1.5 rounded-lg hover:bg-slate-50 transition-colors">
-            View Sales
+            className="text-[12px] text-slate-500 border border-slate-200 h-9 md:h-auto px-3 md:py-1.5 rounded-lg hover:bg-slate-50 active:bg-slate-100 transition-colors whitespace-nowrap touch-manipulation">
+            <span className="hidden sm:inline">View </span>Sales
           </button>
           <button onClick={() => router.push("/dashboard/pos")}
-            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[12px] px-3.5 py-1.5 rounded-lg transition-colors">
+            className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-[12px] h-9 md:h-auto px-3.5 md:py-1.5 rounded-lg transition-colors whitespace-nowrap touch-manipulation">
             <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-            New Order
+            New<span className="hidden sm:inline"> Order</span>
           </button>
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto p-6 space-y-6" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
+      <div className="flex-1 overflow-y-auto p-3 md:p-6 space-y-4 md:space-y-6" style={{ scrollbarWidth: "thin", scrollbarColor: "#e2e8f0 transparent" }}>
 
-        {/* Daily stats */}
-        <div className="grid grid-cols-3 gap-3">
+        {/* Daily stats — stays 3-up on phones (at-a-glance is the whole point),
+            but the card stacks vertically so it fits a ~110px column */}
+        <div className="grid grid-cols-3 gap-2 md:gap-3">
           {statCards.map((s) => (
-            <div key={s.label} className={`bg-white border ${s.border} rounded-xl px-5 py-4 flex items-center gap-4`}>
-              <div className={`w-9 h-9 rounded-xl ${s.bg} flex items-center justify-center flex-shrink-0`}>
+            <div key={s.label} className={`bg-white border ${s.border} rounded-xl px-3 py-3 md:px-5 md:py-4 flex flex-col md:flex-row md:items-center gap-2 md:gap-4`}>
+              <div className={`w-8 h-8 md:w-9 md:h-9 rounded-xl ${s.bg} flex items-center justify-center flex-shrink-0`}>
                 <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" className={s.color}>
                   <path d={s.icon}/>
                 </svg>
               </div>
-              <div>
-                <p className="text-[11px] text-slate-400">{s.label} · Today</p>
-                <p className={`text-[22px] font-medium ${s.color} leading-tight`}>{s.value}</p>
+              <div className="min-w-0">
+                <p className="text-[10px] md:text-[11px] text-slate-400 truncate">{s.label}<span className="hidden md:inline"> · Today</span></p>
+                <p className={`text-[19px] md:text-[22px] font-medium ${s.color} leading-tight`}>{s.value}</p>
               </div>
             </div>
           ))}

@@ -4,14 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import { useSession } from "@/context/SessionContext";
+import { API } from "@/lib/api";
 
 interface Branch {
   branch_id:   number;
   branch_name: string;
   location:    string;
 }
-
-const API = "http://localhost:5000";
 
 export default function BranchChoice() {
   const router = useRouter();
@@ -62,7 +61,7 @@ export default function BranchChoice() {
 
   return (
     <div
-      className="min-h-screen bg-slate-50 flex items-center justify-center p-6"
+      className="min-h-[100dvh] bg-slate-50 flex items-center justify-center p-4 md:p-6"
       style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}
     >
       <div className="w-full max-w-md">
@@ -105,8 +104,8 @@ export default function BranchChoice() {
                   <button
                     key={branch.branch_id}
                     onClick={() => setSelected(branch)}
-                    className={`w-full text-left px-5 py-4 flex items-center gap-4 transition-colors ${
-                      isSelected ? "bg-indigo-50" : "hover:bg-slate-50"
+                    className={`w-full text-left px-4 md:px-5 py-4 flex items-center gap-4 transition-colors touch-manipulation ${
+                      isSelected ? "bg-indigo-50" : "hover:bg-slate-50 active:bg-slate-100"
                     }`}
                   >
                     {/* Branch icon */}
@@ -152,7 +151,7 @@ export default function BranchChoice() {
         <button
           onClick={handleConfirm}
           disabled={!selected || confirming}
-          className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-[13px] py-3 rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+          className="w-full bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-[13px] py-3.5 md:py-3 rounded-xl disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 touch-manipulation"
         >
           {confirming ? (
             <>

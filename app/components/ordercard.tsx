@@ -39,7 +39,7 @@ export default function OrderCard({ order }: { order: Order }) {
   return (
     <button
       onClick={() => router.push(`/dashboard/pos?order_id=${order.order_id}`)}
-      className={`w-full text-left rounded-xl p-4 hover:shadow-md transition-all duration-150 active:scale-[0.98] group border ${cardBg}`}
+      className={`w-full text-left rounded-xl p-4 hover:shadow-md transition-all duration-150 active:scale-[0.98] group border touch-manipulation ${cardBg}`}
       style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}
     >
       {/* Header */}
@@ -75,8 +75,8 @@ export default function OrderCard({ order }: { order: Order }) {
       {/* Items */}
       <div className="space-y-1 mb-3">
         {order.items.slice(0, 3).map((item) => (
-          <div key={item.order_item_id} className="flex items-center justify-between">
-            <span className={`text-[12px] truncate max-w-[160px] ${item.served ? "text-slate-400 line-through" : "text-slate-600"}`}>
+          <div key={item.order_item_id} className="flex items-center justify-between gap-2">
+            <span className={`text-[12px] truncate min-w-0 flex-1 ${item.served ? "text-slate-400 line-through" : "text-slate-600"}`}>
               {item.menu_name}
             </span>
             <span className="text-[11px] text-slate-400 flex-shrink-0">×{item.quantity}</span>

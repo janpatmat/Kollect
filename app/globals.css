@@ -24,3 +24,68 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ── Mobile ──────────────────────────────────────────────────────────────────
+   iOS Safari auto-zooms the viewport when a focused input's font-size is under
+   16px. The UI uses 11-13px type throughout, so without this every tap into a
+   field (table no., pax, amount received) would jerk the page. Applied only
+   below the md breakpoint so the desktop density is untouched. */
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+/* Stop the pull-to-refresh / rubber-band bounce from fighting the POS bottom
+   sheet and the sticky cart bar. */
+html,
+body {
+  overscroll-behavior-y: none;
+}
+
+/* ── Mobile slide-in surfaces ────────────────────────────────────────────────
+   The nav drawer and the POS order sheet slide in from off-screen below md.
+   Kept as hand-written CSS rather than Tailwind translate-* utilities for one
+   reason: the closed state also needs `visibility: hidden`, so the off-screen
+   panel drops out of the tab order, with its flip *delayed* by the transform
+   duration so the slide-out still animates. Expressing that delay in utility
+   classes is worse than just writing the two rules.
+
+   Both blocks sit inside the mobile media query, so at md+ these elements keep
+   their static desktop layout untouched. `.*-open` deliberately has the same
+   specificity as the base rule and wins on source order. */
+@media (max-width: 767px) {
+  .app-drawer {
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition: transform 0.2s ease-out, visibility 0s linear 0.2s;
+  }
+  .app-drawer-open {
+    transform: translateX(0);
+    visibility: visible;
+    transition: transform 0.2s ease-out, visibility 0s;
+  }
+
+  .pos-sheet {
+    transform: translateY(100%);
+    visibility: hidden;
+    transition: transform 0.3s ease-out, visibility 0s linear 0.3s;
+  }
+  .pos-sheet-open {
+    transform: translateY(0);
+    visibility: visible;
+    transition: transform 0.3s ease-out, visibility 0s;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-drawer,
+  .app-drawer-open,
+  .pos-sheet,
+  .pos-sheet-open {
+    transition: none;
+  }
+}
+
